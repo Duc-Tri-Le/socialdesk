@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+.bun-cache/
+
+# Build artifacts
+dist/
+dist-cvm/
+client/dist/
+server/dist/
+*.tsbuildinfo*
+
+# SQLite temp files
+*.db-shm
+*.db-wal
+*.db-journal
+
+# Uploads
+uploads/
+
+# Archives
+*.zip
+
+# Environment & Logs
+.env
+*.log
+.DS_Store
+Thumbs.db

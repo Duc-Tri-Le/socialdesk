@@ -1,0 +1,167 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1792299589082,
+      "tag": "0001_initial",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1792299589082,
+      "tag": "0002_social_desk_tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1792300335825,
+      "tag": "0003_accounts_and_sheet_source",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1792304840297,
+      "tag": "0004_add_account_profile_url",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1792305494036,
+      "tag": "0005_add_fb_pages",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1792308235672,
+      "tag": "0006_sheet_workflow_stt_media_and_post_metrics",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1792311614209,
+      "tag": "0007_sheet_sources_list",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1792315718037,
+      "tag": "0008_add_draft_selling_point_and_angle",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1792317402304,
+      "tag": "0009_add_draft_size_and_sale_window",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1792319366644,
+      "tag": "0010_add_product_size_column",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1792467883035,
+      "tag": "0011_add_product_and_draft_sku",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1792476995375,
+      "tag": "0012_add_draft_caption_source",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1792489738096,
+      "tag": "0013_select_linked_instagram_accounts_for_posting",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1792515734961,
+      "tag": "0014_add_group_added_by_facebook_account",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "6",
+      "when": 1792516098617,
+      "tag": "0015_add_group_memberships_per_account",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "6",
+      "when": 1792551664729,
+      "tag": "0016_add_drive_images_to_products_and_drafts",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "6",
+      "when": 1792553738941,
+      "tag": "0017_add_draft_images_customized_flag",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1792595815782,
+      "tag": "0018_add_product_colors_list",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1792645091959,
+      "tag": "0019_add_draft_idempotency_key",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "6",
+      "when": 1792647802764,
+      "tag": "0020_two_state_group_membership_and_unify_joined_flag",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1792649173517,
+      "tag": "0021_separate_page_and_account_group_membership_status",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "6",
+      "when": 1792656193688,
+      "tag": "0022_add_publish_records",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "6",
+      "when": 1792658396215,
+      "tag": "0023_add_draft_pack_targets",
+      "breakpoints": true
+    }
+  ]
+}

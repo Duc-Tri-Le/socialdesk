@@ -1,0 +1,11 @@
+{
+  "name": "@hatch/space-sdk",
+  "version": "1.0.0",
+  "main": "index.ts",
+  "types": "index.ts",
+  "exports": {
+    ".": "./index.ts",
+    "./client": "./client.ts",
+    "./build": "./build.ts"
+  }
+}

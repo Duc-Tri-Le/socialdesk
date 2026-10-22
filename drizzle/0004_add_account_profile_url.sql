@@ -1,0 +1,1 @@
+ALTER TABLE accounts ADD COLUMN profile_url TEXT NOT NULL DEFAULT '';
