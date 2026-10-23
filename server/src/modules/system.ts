@@ -184,7 +184,7 @@ export const systemActions = {
     }),
     async handler(ctx) {
       const db = ctx.db<typeof schema>();
-      const [prods, grps, drfts, media, packed, accs, pgs, mets] =
+      const [prods, grps, drfts, media, packed, accs, pgs, mets, pubRecs] =
         await Promise.all([
           db.select().from(schema.products),
           db.select().from(schema.fbGroups),
@@ -203,7 +203,11 @@ export const systemActions = {
             .from(schema.fbPages)
             .orderBy(asc(schema.fbPages.id)),
           db.select().from(schema.postMetrics),
+          db.select().from(schema.publishRecords),
         ]);
+      const publishedDraftIds = new Set(
+        pubRecs.filter((r) => r.status === "published").map((r) => r.draftId),
+      );
       const accountNameById = new Map(accs.map((a) => [a.id, a.name]));
       // Số nhóm đã tham gia đếm TÁCH RIÊNG theo danh tính: tài
       // khoản chính một số, Page con một số — không gộp chung vì
@@ -249,8 +253,12 @@ export const systemActions = {
           ).length,
           groups_target: grps.filter((g) => g.isTarget === 1).length,
           drafts_pending: drfts.filter((d) => d.status === "draft").length,
-          drafts_approved: drfts.filter((d) => d.status === "approved").length,
-          drafts_packed: drfts.filter((d) => d.status === "packed").length,
+          drafts_approved: drfts.filter(
+            (d) => d.status === "approved" && !publishedDraftIds.has(d.id),
+          ).length,
+          drafts_packed: drfts.filter(
+            (d) => d.status === "packed" && !publishedDraftIds.has(d.id),
+          ).length,
           media: media.length,
           packed_today: packedToday,
           metrics_posts: mets.length,

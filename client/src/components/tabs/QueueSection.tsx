@@ -111,6 +111,10 @@ export function QueueSection({
     }) => api.publishDraft(args),
     onSuccess: (res, args) => {
       setFeedback((f) => ({ ...f, [args.id]: { ok: res.ok, text: res.message } }));
+      if (res.ok && res.results.some((r) => r.status === "published")) {
+        setQueueTab("history");
+        setQueuePage((s) => ({ ...s, history: 1 }));
+      }
       refresh();
     },
     onError: (err, args) => {
@@ -194,7 +198,9 @@ export function QueueSection({
       label: "Đã duyệt",
       emptyText: "Chưa có bài nào đã duyệt.",
       ariaLabel: "Đã duyệt",
-      matches: (d) => d.status === "approved" || d.status === "packed",
+      matches: (d) =>
+        (d.status === "approved" || d.status === "packed") &&
+        !d.publish_records.some((r) => r.status === "published"),
     },
     {
       id: "history",
@@ -270,6 +276,7 @@ export function QueueSection({
                 <QueueHistoryCard
                   key={d.id}
                   draft={d}
+                  feedback={feedback[d.id]}
                   onDelete={(id) => del.mutate(id)}
                   isDeletePending={del.isPending}
                 />

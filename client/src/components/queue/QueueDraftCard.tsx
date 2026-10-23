@@ -80,6 +80,7 @@ export function QueueDraftCard({
 }: QueueDraftCardProps) {
   const composeJobs = useComposeJobs();
 
+  const [open, setOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [captionDraft, setCaptionDraft] = useState(d.caption);
   const [packOpen, setPackOpen] = useState(false);
@@ -145,6 +146,46 @@ export function QueueDraftCard({
 
   const latestPublishRecords = getLatestPublishRecords(d.publish_records);
 
+  const isDraft = d.status === "draft";
+
+  // Tóm tắt các đích đăng đã chọn cho bài đã duyệt
+  const targetCount =
+    selectedPages.length + selectedIg.length + selectedGroups.length;
+  const pickedTargetNames = [
+    ...allPages.filter((p) => selectedPages.includes(p.id)).map((p) => p.name),
+    ...igAccounts.filter((a) => selectedIg.includes(a.id)).map((a) => `@${a.handle || a.name}`),
+    ...joinedGroups.filter((g) => selectedGroups.includes(g.id)).map((g) => g.name),
+  ];
+  const targetSummaryText =
+    targetCount === 0
+      ? "Chưa chọn đích"
+      : `${targetCount} đích (${pickedTargetNames.slice(0, 2).join(", ")}${
+          targetCount > 2 ? ` +${targetCount - 2}` : ""
+        })`;
+
+  const summaryParts = isDraft
+    ? [
+        d.sku ? `SKU ${d.sku}` : d.stt ? `STT ${d.stt}` : "",
+        d.color || "chưa rõ màu",
+        d.price || "chưa có giá",
+        d.drive_images.length > 0
+          ? `${d.drive_images.length} ảnh`
+          : d.drive_status === "empty"
+            ? "chưa có ảnh"
+            : "",
+        d.video_url ? "có video" : "",
+      ].filter(Boolean)
+    : [
+        targetSummaryText,
+        d.color || "chưa rõ màu",
+        d.price || "chưa có giá",
+        d.drive_images.length > 0 ? `${d.drive_images.length} ảnh` : "",
+      ].filter(Boolean);
+
+  const hasNeedsLogin = latestPublishRecords.some((r) => r.status === "needs_login");
+  const hasFailed = latestPublishRecords.some((r) => r.status === "failed");
+  const hasQueued = latestPublishRecords.some((r) => r.status === "queued");
+
   return (
     <li className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] p-4">
       {/* Header */}
@@ -155,204 +196,48 @@ export function QueueDraftCard({
         </p>
       </div>
 
-      {/* Thông số sản phẩm */}
-      <p className="mt-0.5 text-xs text-[var(--dim)]">
-        {d.sku ? `SKU ${d.sku} · ` : d.stt ? `STT ${d.stt} · ` : ""}
-        {d.maker ? `Hãng xe ${d.maker} · ` : ""}
-        {d.color || "chưa rõ màu"} · {d.price || "chưa có giá"} · tồn {d.stock}
-        {d.selling_point ? ` · Chi tiết tự ghi đè: ${d.selling_point}` : " · Chi tiết: AI tự soạn"}
-        {d.size_cm ? ` · Kích thước: ${d.size_cm}` : ""}
-      </p>
-
-      {/* Tags media */}
-      <p className="mt-1 flex flex-wrap gap-1.5 text-xs">
-        {d.has_real_image ? (
-          <a
-            href={d.image_url}
-            target="_blank"
-            rel="noreferrer"
-            aria-label={`Thư mục Drive của ${d.product_name} — đã gắn ${d.drive_images.length} ảnh vào bài`}
-            className="rounded-full bg-[var(--surface-alt)] px-2 py-0.5 font-semibold text-[var(--ok)]"
-          >
-            Có {d.drive_images.length} ảnh đã gắn vào bài
-          </a>
-        ) : (
-          <span className="rounded-full bg-[var(--surface-alt)] px-2 py-0.5 font-semibold text-[var(--dim)]">
-            {d.drive_status === "empty"
-              ? d.drive_error
-                ? `Chưa có ảnh — ${d.drive_error}`
-                : "Chưa có ảnh — thư mục Drive đang rỗng"
-              : d.drive_status === "error"
-                ? `Chưa có ảnh — ${d.drive_error || "không đọc được thư mục Drive"}`
-                : d.drive_status === "no_link"
-                  ? `Chưa có ảnh — ${d.drive_error || "chưa có link thư mục Drive"}`
-                  : "Chưa có ảnh thật từ Drive"}
+      {/* Dòng tóm tắt trạng thái gọn nhẹ như Lịch sử bài đăng */}
+      <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs">
+        {isDraft ? (
+          <span className="rounded-full bg-[var(--surface-alt)] px-2 py-0.5 font-semibold text-[var(--accent-ink)]">
+            ⏳ Chờ duyệt
           </span>
-        )}
-
-        {d.video_url ? (
-          <a
-            href={d.video_url}
-            target="_blank"
-            rel="noreferrer"
-            aria-label={`Video của ${d.product_name}`}
-            className="rounded-full bg-[var(--surface-alt)] px-2 py-0.5 font-semibold text-[var(--ok)]"
-          >
-            Có video đã gắn vào bài
-          </a>
         ) : (
-          <span className="rounded-full bg-[var(--surface-alt)] px-2 py-0.5 font-semibold text-[var(--dim)]">
-            Chưa có video
-          </span>
-        )}
-
-        {d.caption_source === "ai" && (
           <span className="rounded-full bg-[var(--surface-alt)] px-2 py-0.5 font-semibold text-[var(--ok)]">
-            Bài do AI viết
+            ✓ Đã duyệt
           </span>
         )}
-        {d.caption_source === "template" && (
+        {summaryParts.length > 0 && (
+          <span className="font-medium text-[var(--dim)]">
+            {summaryParts.join(" · ")}
+          </span>
+        )}
+        {isDraft && d.placeholders.length > 0 && (
           <span className="rounded-full bg-[var(--surface-alt)] px-2 py-0.5 font-semibold text-[var(--danger)]">
-            Bài theo mẫu dự phòng — AI chưa viết được
+            ⚠ Còn mục chưa điền
           </span>
         )}
-        {d.caption_source === "manual" && (
-          <span className="rounded-full bg-[var(--surface-alt)] px-2 py-0.5 font-semibold text-[var(--dim)]">
-            Nội dung bạn đã sửa tay
+        {!isDraft && hasNeedsLogin && (
+          <span className="rounded-full bg-[var(--surface-alt)] px-2 py-0.5 font-semibold text-[var(--warn)]">
+            🔑 Chờ đăng nhập
+          </span>
+        )}
+        {!isDraft && !hasNeedsLogin && hasFailed && (
+          <span className="rounded-full bg-[var(--surface-alt)] px-2 py-0.5 font-semibold text-[var(--danger)]">
+            ⚠ Đăng lỗi
+          </span>
+        )}
+        {!isDraft && hasQueued && (
+          <span className="rounded-full bg-[var(--surface-alt)] px-2 py-0.5 font-semibold text-[var(--accent-ink)]">
+            ⏳ Đang đăng…
           </span>
         )}
       </p>
-
-      {/* Dải ảnh Drive */}
-      <DriveImageStrip images={d.drive_images} label={d.product_name} />
-
-      {d.placeholders.length > 0 && (
-        <p className="mt-2 text-xs font-medium text-[var(--danger)]">
-          Chưa điền: {d.placeholders.join("  ")}
-        </p>
-      )}
-
-      {/* Soạn/xem Caption */}
-      {isEditing ? (
-        <div className="mt-3 space-y-3">
-          <div>
-            <label className={labelCls} htmlFor={`cap-${d.id}`}>
-              Bài đăng (nhóm + fanpage + Instagram)
-            </label>
-            <textarea
-              id={`cap-${d.id}`}
-              rows={12}
-              className={`${inputCls} font-mono text-xs leading-5`}
-              value={captionDraft}
-              onChange={(e) => setCaptionDraft(e.target.value)}
-            />
-          </div>
-          <div className="flex gap-2">
-            <button
-              className={btnPrimary}
-              disabled={isUpdatePending}
-              onClick={() => {
-                onUpdateCaption({ id: d.id, caption: captionDraft });
-                setIsEditing(false);
-              }}
-            >
-              Lưu nội dung
-            </button>
-            <button
-              className={btnGhost}
-              onClick={() => {
-                setCaptionDraft(d.caption);
-                setIsEditing(false);
-              }}
-            >
-              Hủy
-            </button>
-          </div>
-        </div>
-      ) : (
-        <pre className="mt-3 max-h-72 overflow-auto whitespace-pre-wrap rounded-[var(--radius)] bg-[var(--surface-alt)] p-3 font-mono text-xs leading-5">
-          {d.caption}
-        </pre>
-      )}
-
-      {/* Gói đăng (khi có) */}
-      {d.pack_text && (
-        <div className="mt-3">
-          <button
-            type="button"
-            className={`${btnGhost} flex w-full items-center justify-between gap-2 text-left`}
-            aria-expanded={packOpen}
-            aria-label={`Gói đăng ${d.code}`}
-            onClick={() => setPackOpen(!packOpen)}
-          >
-            <span className="text-xs font-semibold text-[var(--ok)]">
-              Gói đăng{d.packed_at ? ` · ${fmtDate(d.packed_at)}` : ""}
-            </span>
-            <span className="text-xs font-medium text-[var(--dim)]">
-              {packOpen ? "Ẩn ▲" : "Xem ▼"}
-            </span>
-          </button>
-          {packOpen && (
-            <div className="mt-2">
-              <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded-[var(--radius)] border border-[var(--ok)] p-3 font-mono text-xs leading-5">
-                {d.pack_text}
-              </pre>
-              <div className="mt-2 flex flex-wrap items-center justify-end gap-2">
-                <button
-                  className={btnGhost}
-                  onClick={handleCopyPack}
-                  aria-label={`Chép gói đăng ${d.code}`}
-                >
-                  {copied ? "Đã chép ✓" : "Chép gói đăng"}
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Lịch sử đăng bài */}
-      {latestPublishRecords.length > 0 && (
-        <div className="mt-3 rounded-[var(--radius)] border border-[var(--border)] p-3">
-          <p className="text-xs font-bold">Lịch sử đăng Bài</p>
-          <ul className="mt-1.5 space-y-1.5">
-            {latestPublishRecords.map((r) => {
-              const badge = getPublishStatusBadge(r.status);
-              return (
-                <li key={r.id} className="text-xs leading-5">
-                  <span
-                    className={`mr-1.5 rounded-full px-2 py-0.5 font-semibold ${badge.badgeClass}`}
-                  >
-                    {badge.label}
-                  </span>
-                  <span className="font-semibold">
-                    {getKindLabel(r.target_kind)} {r.target_name}
-                  </span>{" "}
-                  <span className="text-[var(--dim)]">· {fmtDate(r.created_at)}</span>
-                  {r.message && (
-                    <span className="block text-[var(--dim)]">{r.message}</span>
-                  )}
-                  {r.post_url && (
-                    <a
-                      href={r.post_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="font-semibold underline"
-                      aria-label={`Xem bài đã đăng của ${d.product_name} trên ${r.target_name}`}
-                    >
-                      Xem bài đã đăng
-                    </a>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      )}
 
       {/* Feedback banner */}
       {feedback && (
         <p
+          role="status"
           className={`mt-2 text-xs font-medium ${
             feedback.ok ? "text-[var(--ok)]" : "text-[var(--danger)]"
           }`}
@@ -361,9 +246,270 @@ export function QueueDraftCard({
         </p>
       )}
 
+      {/* Chi tiết khi mở rộng (Xem chi tiết) */}
+      {open && (
+        <div className="mt-3">
+          {/* Thông số sản phẩm */}
+          <p className="text-xs text-[var(--dim)]">
+            {d.sku ? `SKU ${d.sku} · ` : d.stt ? `STT ${d.stt} · ` : ""}
+            {d.maker ? `Hãng xe ${d.maker} · ` : ""}
+            {d.color || "chưa rõ màu"} · {d.price || "chưa có giá"} · tồn {d.stock}
+            {d.selling_point ? ` · Chi tiết tự ghi đè: ${d.selling_point}` : " · Chi tiết: AI tự soạn"}
+            {d.size_cm ? ` · Kích thước: ${d.size_cm}` : ""}
+          </p>
+
+          {/* Tags media */}
+          <p className="mt-1 flex flex-wrap gap-1.5 text-xs">
+            {d.has_real_image ? (
+              <a
+                href={d.image_url}
+                target="_blank"
+                rel="noreferrer"
+                aria-label={`Thư mục Drive của ${d.product_name} — đã gắn ${d.drive_images.length} ảnh vào bài`}
+                className="rounded-full bg-[var(--surface-alt)] px-2 py-0.5 font-semibold text-[var(--ok)]"
+              >
+                Có {d.drive_images.length} ảnh đã gắn vào bài
+              </a>
+            ) : (
+              <span className="rounded-full bg-[var(--surface-alt)] px-2 py-0.5 font-semibold text-[var(--dim)]">
+                {d.drive_status === "empty"
+                  ? d.drive_error
+                    ? `Chưa có ảnh — ${d.drive_error}`
+                    : "Chưa có ảnh — thư mục Drive đang rỗng"
+                  : d.drive_status === "error"
+                    ? `Chưa có ảnh — ${d.drive_error || "không đọc được thư mục Drive"}`
+                    : d.drive_status === "no_link"
+                      ? `Chưa có ảnh — ${d.drive_error || "chưa có link thư mục Drive"}`
+                      : "Chưa có ảnh thật từ Drive"}
+              </span>
+            )}
+
+            {d.video_url ? (
+              <a
+                href={d.video_url}
+                target="_blank"
+                rel="noreferrer"
+                aria-label={`Video của ${d.product_name}`}
+                className="rounded-full bg-[var(--surface-alt)] px-2 py-0.5 font-semibold text-[var(--ok)]"
+              >
+                Có video đã gắn vào bài
+              </a>
+            ) : (
+              <span className="rounded-full bg-[var(--surface-alt)] px-2 py-0.5 font-semibold text-[var(--dim)]">
+                Chưa có video
+              </span>
+            )}
+
+            {d.caption_source === "ai" && (
+              <span className="rounded-full bg-[var(--surface-alt)] px-2 py-0.5 font-semibold text-[var(--ok)]">
+                Bài do AI viết
+              </span>
+            )}
+            {d.caption_source === "template" && (
+              <span className="rounded-full bg-[var(--surface-alt)] px-2 py-0.5 font-semibold text-[var(--danger)]">
+                Bài theo mẫu dự phòng — AI chưa viết được
+              </span>
+            )}
+            {d.caption_source === "manual" && (
+              <span className="rounded-full bg-[var(--surface-alt)] px-2 py-0.5 font-semibold text-[var(--dim)]">
+                Nội dung bạn đã sửa tay
+              </span>
+            )}
+          </p>
+
+          {/* Dải ảnh Drive */}
+          <DriveImageStrip images={d.drive_images} label={d.product_name} />
+
+          {d.placeholders.length > 0 && (
+            <p className="mt-2 text-xs font-medium text-[var(--danger)]">
+              Chưa điền: {d.placeholders.join("  ")}
+            </p>
+          )}
+
+          {/* Soạn/xem Caption */}
+          {isEditing ? (
+            <div className="mt-3 space-y-3">
+              <div>
+                <label className={labelCls} htmlFor={`cap-${d.id}`}>
+                  Bài đăng (nhóm + fanpage + Instagram)
+                </label>
+                <textarea
+                  id={`cap-${d.id}`}
+                  rows={12}
+                  className={`${inputCls} font-mono text-xs leading-5`}
+                  value={captionDraft}
+                  onChange={(e) => setCaptionDraft(e.target.value)}
+                />
+              </div>
+              <div className="flex gap-2">
+                <button
+                  className={btnPrimary}
+                  disabled={isUpdatePending}
+                  onClick={() => {
+                    onUpdateCaption({ id: d.id, caption: captionDraft });
+                    setIsEditing(false);
+                  }}
+                >
+                  Lưu nội dung
+                </button>
+                <button
+                  className={btnGhost}
+                  onClick={() => {
+                    setCaptionDraft(d.caption);
+                    setIsEditing(false);
+                  }}
+                >
+                  Hủy
+                </button>
+              </div>
+            </div>
+          ) : (
+            <pre className="mt-3 max-h-72 overflow-auto whitespace-pre-wrap rounded-[var(--radius)] bg-[var(--surface-alt)] p-3 font-mono text-xs leading-5">
+              {d.caption}
+            </pre>
+          )}
+
+          {/* Gói đăng */}
+          {!isDraft &&
+            (d.pack_text ? (
+              <div className="mt-3">
+                <button
+                  type="button"
+                  className={`${btnGhost} flex w-full items-center justify-between gap-2 text-left`}
+                  aria-expanded={packOpen}
+                  aria-label={`Gói đăng ${d.code}`}
+                  onClick={() => setPackOpen(!packOpen)}
+                >
+                  <span className="text-xs font-semibold text-[var(--ok)]">
+                    Gói đăng{d.packed_at ? ` · ${fmtDate(d.packed_at)}` : ""}
+                  </span>
+                  <span className="text-xs font-medium text-[var(--dim)]">
+                    {packOpen ? "Ẩn ▲" : "Xem ▼"}
+                  </span>
+                </button>
+                {packOpen && (
+                  <div className="mt-2">
+                    <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded-[var(--radius)] border border-[var(--ok)] p-3 font-mono text-xs leading-5">
+                      {d.pack_text}
+                    </pre>
+                    <div className="mt-2 flex flex-wrap items-center justify-end gap-2">
+                      <button
+                        className={btnGhost}
+                        onClick={handleCopyPack}
+                        aria-label={`Chép gói đăng ${d.code}`}
+                      >
+                        {copied ? "Đã chép ✓" : "Chép gói đăng"}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="mt-3 rounded-[var(--radius)] border border-dashed border-[var(--border)] bg-[var(--surface-alt)] p-2.5 text-xs text-[var(--dim)]">
+                ℹ️ Bài này chưa có gói đăng — bạn chỉ cần chọn các đích đăng ở bên dưới rồi bấm nút <span className="font-semibold text-[var(--text)]">“Cập nhật gói đăng”</span> để tạo gói.
+              </div>
+            ))}
+
+          {/* Lịch sử đăng bài (lần thử trước) */}
+          {latestPublishRecords.length > 0 && (
+            <div className="mt-3 rounded-[var(--radius)] border border-[var(--border)] p-3">
+              <p className="text-xs font-bold">Lịch sử đăng Bài</p>
+              <ul className="mt-1.5 space-y-1.5">
+                {latestPublishRecords.map((r) => {
+                  const badge = getPublishStatusBadge(r.status);
+                  return (
+                    <li key={r.id} className="text-xs leading-5">
+                      <span
+                        className={`mr-1.5 rounded-full px-2 py-0.5 font-semibold ${badge.badgeClass}`}
+                      >
+                        {badge.label}
+                      </span>
+                      <span className="font-semibold">
+                        {getKindLabel(r.target_kind)} {r.target_name}
+                      </span>{" "}
+                      <span className="text-[var(--dim)]">· {fmtDate(r.created_at)}</span>
+                      {r.message && (
+                        <span className="block text-[var(--dim)]">{r.message}</span>
+                      )}
+                      {r.post_url && (
+                        <a
+                          href={r.post_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="font-semibold underline"
+                          aria-label={`Xem bài đã đăng của ${d.product_name} trên ${r.target_name}`}
+                        >
+                          Xem bài đã đăng
+                        </a>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
+
+          {/* Bộ chọn đích đăng */}
+          <div className="mt-3">
+            <TargetPicker
+              draft={d}
+              isOpen={pickerOpen}
+              onToggleOpen={() => setPickerOpen(!pickerOpen)}
+              onClose={() => setPickerOpen(false)}
+              selectedGroupIds={selectedGroups}
+              selectedPageIds={selectedPages}
+              selectedIgIds={selectedIg}
+              onApplyTargets={applyTargets}
+              joinedGroups={joinedGroups}
+              allPages={allPages}
+              igAccounts={igAccounts}
+              mainAccounts={mainAccounts}
+              selectedMainCount={selectedMainCount}
+              onToggleMainAccount={onToggleMainAccount}
+              isMainAccountPending={isMainAccountPending}
+              onGoGroups={onGoGroups}
+            />
+          </div>
+        </div>
+      )}
+
       {/* Action controls */}
       <div className="mt-3 flex flex-wrap gap-2">
-        {d.status === "draft" && !isEditing && (
+        {isDraft ? (
+          <button
+            className={`${btnPrimary} whitespace-nowrap`}
+            disabled={isApprovePending}
+            onClick={() => onApprove(d.id)}
+            aria-label={`Duyệt bài viết ${d.product_name}`}
+          >
+            {isApprovePending ? "Đang duyệt…" : "Duyệt bài viết"}
+          </button>
+        ) : (
+          <button
+            className={`${btnPrimary} whitespace-nowrap`}
+            disabled={isPublishPending}
+            aria-expanded={publishConfirm}
+            aria-label={`Đăng Bài ${d.product_name} lên các đích đã chọn`}
+            onClick={() => setPublishConfirm(!publishConfirm)}
+          >
+            Đăng Bài
+          </button>
+        )}
+
+        <button
+          type="button"
+          className={btnGhost}
+          aria-expanded={open}
+          aria-label={`${open ? "Thu gọn" : "Xem chi tiết"} bài viết ${d.product_name}`}
+          onClick={() => {
+            if (open && isEditing) setIsEditing(false);
+            setOpen(!open);
+          }}
+        >
+          {open ? "Thu gọn ▲" : "Xem chi tiết ▼"}
+        </button>
+
+        {open && isDraft && !isEditing && (
           <>
             <button
               className={btnGhost}
@@ -385,116 +531,64 @@ export function QueueDraftCard({
           </>
         )}
 
-        {/* Bộ chọn đích đăng */}
-        <div className="w-full space-y-2">
-          <TargetPicker
-            draft={d}
-            isOpen={pickerOpen}
-            onToggleOpen={() => setPickerOpen(!pickerOpen)}
-            onClose={() => setPickerOpen(false)}
-            selectedGroupIds={selectedGroups}
-            selectedPageIds={selectedPages}
-            selectedIgIds={selectedIg}
-            onApplyTargets={applyTargets}
-            joinedGroups={joinedGroups}
-            allPages={allPages}
-            igAccounts={igAccounts}
-            mainAccounts={mainAccounts}
-            selectedMainCount={selectedMainCount}
-            onToggleMainAccount={onToggleMainAccount}
-            isMainAccountPending={isMainAccountPending}
-            onGoGroups={onGoGroups}
-          />
-
-          {/* Dòng nút bấm hành động */}
-          <div className="flex flex-wrap gap-2 pt-1">
-            {d.status === "draft" ? (
-              <button
-                className={`${btnPrimary} whitespace-nowrap`}
-                disabled={isApprovePending}
-                onClick={() => onApprove(d.id)}
-                aria-label={`Duyệt bài viết ${d.product_name}`}
-              >
-                {isApprovePending ? "Đang duyệt…" : "Duyệt bài viết"}
-              </button>
-            ) : (
-              <>
-                <button
-                  className={`${btnPrimary} whitespace-nowrap`}
-                  disabled={isPublishPending}
-                  aria-expanded={publishConfirm}
-                  aria-label={`Đăng Bài ${d.product_name} lên các đích đã chọn`}
-                  onClick={() => setPublishConfirm(!publishConfirm)}
-                >
-                  Đăng Bài
-                </button>
-                <button
-                  className={`${btnGhost} whitespace-nowrap`}
-                  disabled={isPackPending}
-                  aria-label={`Cập nhật gói đăng cho ${d.product_name} theo các đích đã chọn`}
-                  onClick={() =>
-                    onPack({
-                      id: d.id,
-                      group_ids: selectedGroups,
-                      page_ids: selectedPages,
-                      instagram_account_ids: selectedIg,
-                    })
-                  }
-                >
-                  Cập nhật gói đăng
-                </button>
-                <button
-                  className={`${btnGhost} whitespace-nowrap`}
-                  onClick={onGoMedia}
-                >
-                  Kiểm tra ảnh/video
-                </button>
-                <button
-                  className={`${btnDanger} whitespace-nowrap`}
-                  onClick={() => onDelete(d.id)}
-                  aria-label={`Xóa bản nháp ${d.code}`}
-                >
-                  Xóa
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Khối xác nhận Đăng bài */}
-        {publishConfirm && (
-          <PublishConfirmDialog
-            draft={d}
-            selectedPageIds={selectedPages}
-            selectedIgIds={selectedIg}
-            selectedGroupIds={selectedGroups}
-            allPages={allPages}
-            igAccounts={igAccounts}
-            joinedGroups={joinedGroups}
-            isPublishPending={isPublishPending}
-            onConfirmPublish={() => {
-              onPublish({
-                id: d.id,
-                group_ids: selectedGroups,
-                page_ids: selectedPages,
-                instagram_account_ids: selectedIg,
-              });
-              setPublishConfirm(false);
-            }}
-            onCancel={() => setPublishConfirm(false)}
-          />
+        {open && !isDraft && (
+          <>
+            <button
+              className={`${btnGhost} whitespace-nowrap`}
+              disabled={isPackPending}
+              aria-label={`Cập nhật gói đăng cho ${d.product_name} theo các đích đã chọn`}
+              onClick={() =>
+                onPack({
+                  id: d.id,
+                  group_ids: selectedGroups,
+                  page_ids: selectedPages,
+                  instagram_account_ids: selectedIg,
+                })
+              }
+            >
+              Cập nhật gói đăng
+            </button>
+            <button
+              className={`${btnGhost} whitespace-nowrap`}
+              onClick={onGoMedia}
+            >
+              Kiểm tra ảnh/video
+            </button>
+          </>
         )}
 
-        {d.status === "draft" && (
-          <button
-            className={btnDanger}
-            onClick={() => onDelete(d.id)}
-            aria-label={`Xóa bản nháp ${d.code}`}
-          >
-            Xóa
-          </button>
-        )}
+        <button
+          className={`${btnDanger} whitespace-nowrap`}
+          onClick={() => onDelete(d.id)}
+          aria-label={`Xóa bản nháp ${d.code}`}
+        >
+          Xóa
+        </button>
       </div>
+
+      {/* Khối xác nhận Đăng bài */}
+      {publishConfirm && (
+        <PublishConfirmDialog
+          draft={d}
+          selectedPageIds={selectedPages}
+          selectedIgIds={selectedIg}
+          selectedGroupIds={selectedGroups}
+          allPages={allPages}
+          igAccounts={igAccounts}
+          joinedGroups={joinedGroups}
+          isPublishPending={isPublishPending}
+          onConfirmPublish={() => {
+            onPublish({
+              id: d.id,
+              group_ids: selectedGroups,
+              page_ids: selectedPages,
+              instagram_account_ids: selectedIg,
+            });
+            setPublishConfirm(false);
+          }}
+          onCancel={() => setPublishConfirm(false)}
+        />
+      )}
     </li>
   );
 }

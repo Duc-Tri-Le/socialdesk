@@ -7,12 +7,14 @@ import { getKindLabel } from "./queueHelpers";
 
 export interface QueueHistoryCardProps {
   draft: Draft;
+  feedback?: { ok: boolean; text: string };
   onDelete: (id: number) => void;
   isDeletePending: boolean;
 }
 
 export function QueueHistoryCard({
   draft: d,
+  feedback,
   onDelete,
   isDeletePending,
 }: QueueHistoryCardProps) {
@@ -56,6 +58,17 @@ export function QueueHistoryCard({
           <span className="font-medium text-[var(--dim)]">{targetSummary}</span>
         )}
       </p>
+
+      {feedback && (
+        <p
+          role="status"
+          className={`mt-2 text-xs font-medium ${
+            feedback.ok ? "text-[var(--ok)]" : "text-[var(--danger)]"
+          }`}
+        >
+          {feedback.text}
+        </p>
+      )}
 
       {open && (
         <div className="mt-3">
