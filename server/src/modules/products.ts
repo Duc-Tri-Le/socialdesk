@@ -1,5 +1,5 @@
 import { defineAction, z } from "@hatch/space-sdk";
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, and } from "drizzle-orm";
 import * as schema from "../schema";
 import { privileged } from "../privileged";
 import { productOut } from "../types";
@@ -59,6 +59,7 @@ export const productActions = {
 
   // Liệt kê lại ảnh thật từ thư mục Drive của MỘT sản phẩm (nút
   // "Quét lại ảnh Drive" / dùng khi thư mục vừa được bổ sung ảnh).
+  // Tự động: xóa file cũ, tải file mới về máy chủ (uploads/drive/) và cập nhật bản nháp liên quan.
   refreshProductImages: defineAction({
     request: z.object({ id: z.number().int().positive() }),
     response: z.object({
@@ -83,15 +84,33 @@ export const productActions = {
         };
       const r = await fetchDriveImages(ctx, row.imageUrl);
       await storeProductDriveImages(db, row.id, r);
+
+      // Đồng bộ ảnh mới sang các bản nháp đang dùng cùng thư mục Drive và chưa sửa ảnh tay
+      if (r.folderId) {
+        await db
+          .update(schema.drafts)
+          .set({
+            driveStatus: r.status,
+            driveError: "error" in r ? r.error : "",
+            driveImages: JSON.stringify(r.images),
+          })
+          .where(
+            and(
+              eq(schema.drafts.driveFolderId, r.folderId),
+              eq(schema.drafts.imagesCustomized, 0),
+            ),
+          );
+      }
+
       ctx.invalidateQueries();
       const n = r.images.length;
       return {
         ok: r.status === "ok",
         message:
           r.status === "ok"
-            ? `Đã lấy ${n} ảnh thật từ thư mục Drive của ${row.name}. Ảnh gốc ${r.images.some((i) => i.is_heic) ? "gồm file HEIC — " : ""}bản dùng để đăng là bản JPEG do Drive kết xuất.`
+            ? `Đã quét và tải ${n} ảnh mới về máy chủ từ Drive của ${row.name}. Đã cập nhật cho sản phẩm và các bản nháp liên quan.`
             : r.status === "empty"
-              ? `Thư mục Drive của ${row.name} đang RỖNG — chưa có file ảnh nào, sản phẩm hiện “Chưa có ảnh”.`
+              ? `Thư mục Drive của ${row.name} đang RỖNG — chưa có file ảnh nào.`
               : "error" in r
                 ? r.error
                 : "Sản phẩm chưa có link thư mục Drive.",

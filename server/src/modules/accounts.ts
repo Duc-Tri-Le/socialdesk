@@ -27,10 +27,11 @@ export const accountActions = {
 
   addAccount: defineAction({
     request: z.object({
-      platform: z.enum(["Facebook", "Instagram"]),
-      name: z.string().min(1),
+      platform: z.enum(["Facebook", "Instagram"]).default("Facebook"),
+      name: z.string().default(""),
       handle: z.string().default(""),
       profile_url: z.string().default(""),
+      extension_code: z.string().default(""),
       linked: z.boolean().default(true),
     }),
     response: z.object({ ok: z.boolean(), message: z.string() }),
@@ -50,12 +51,16 @@ export const accountActions = {
         args.linked &&
         (args.platform === "Instagram" ||
           !existing.some((a) => a.selected === 1));
-      const name = args.name.trim();
+      const extCode = (args.extension_code || "").trim().toUpperCase();
+      const name =
+        args.name.trim() ||
+        (extCode ? `Nick Facebook (${extCode})` : "Nick Facebook");
       await db.insert(schema.accounts).values({
         platform: args.platform,
         name,
         handle: args.handle.trim(),
         profileUrl: args.profile_url.trim(),
+        extensionCode: extCode,
         linked: args.linked ? 1 : 0,
         selected: autoSelect ? 1 : 0,
       });
@@ -218,6 +223,32 @@ export const accountActions = {
         message: url
           ? `Đã lưu link trang của ${row.name} — bấm vào tên nick là mở thẳng trang đó.`
           : `Đã xóa link trang của ${row.name}.`,
+      };
+    },
+  }),
+
+  setAccountName: defineAction({
+    request: z.object({
+      id: z.number().int().positive(),
+      name: z.string().min(1),
+    }),
+    response: z.object({ ok: z.boolean(), message: z.string() }),
+    async handler(ctx, args) {
+      const db = ctx.db<typeof schema>();
+      const [row] = await db
+        .select()
+        .from(schema.accounts)
+        .where(eq(schema.accounts.id, args.id));
+      if (!row) return { ok: false, message: "Không tìm thấy tài khoản." };
+      const newName = args.name.trim();
+      await db
+        .update(schema.accounts)
+        .set({ name: newName })
+        .where(eq(schema.accounts.id, args.id));
+      ctx.invalidateQueries();
+      return {
+        ok: true,
+        message: `Đã đổi tên nick thành "${newName}".`,
       };
     },
   }),

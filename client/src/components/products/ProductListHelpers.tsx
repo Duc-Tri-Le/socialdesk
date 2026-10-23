@@ -6,6 +6,7 @@ import { DriveImageStrip } from "../ui/DriveImageStrip";
 import { ProductThumb } from "../ui/ProductThumb";
 
 export const PRODUCT_PAGE_SIZE = 10;
+export { useProductFilterPagination } from "./useProductFilterPagination";
 
 export type ProductSort =
   | "default"

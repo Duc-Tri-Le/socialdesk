@@ -3,10 +3,81 @@
 
 console.log("[Social Desk] Content script đã sẵn sàng trên trang:", window.location.href);
 
+// Hàm tự động phát hiện tên nick Facebook từ trang
+function getFacebookProfileInfo() {
+  let name = "";
+  let profileUrl = "";
+
+  try {
+    // 1. Thử lấy từ các liên kết cá nhân trong menu trái/header
+    const candidateLinks = Array.from(
+      document.querySelectorAll('a[href*="/me/"], a[href*="/me?"], a[href*="profile.php"], div[role="navigation"] a[href*="facebook.com/"]')
+    );
+    for (const a of candidateLinks) {
+      const text = a.innerText?.trim();
+      const href = a.href || "";
+      if (
+        text &&
+        text.length >= 2 &&
+        text.length <= 40 &&
+        !text.includes("Facebook") &&
+        !text.includes("Watch") &&
+        !text.includes("Gaming") &&
+        !text.includes("Video") &&
+        !text.includes("Bảng feed") &&
+        !text.includes("Bạn bè")
+      ) {
+        name = text;
+        profileUrl = href;
+        break;
+      }
+    }
+
+    // 2. Thử tìm qua avatar profile aria-label
+    if (!name) {
+      const ariaProfile = document.querySelector('[aria-label="Trang cá nhân của bạn"], [aria-label="Your profile"]');
+      if (ariaProfile) {
+        const parent = ariaProfile.closest('div[role="button"], a');
+        if (parent && parent.innerText) {
+          name = parent.innerText.trim();
+        }
+      }
+    }
+
+    // 3. Đọc User ID từ Cookie nếu có
+    const matchUser = document.cookie.match(/c_user=(\d+)/);
+    if (matchUser && matchUser[1] && !profileUrl) {
+      profileUrl = `https://www.facebook.com/${matchUser[1]}`;
+    }
+  } catch (e) {
+    console.warn("[Social Desk] Lỗi đọc thông tin nick Facebook:", e);
+  }
+
+  return { name, profileUrl };
+}
+
+// Báo cáo thông tin nick Facebook về Background Script khi trang sẵn sàng
+setTimeout(() => {
+  const info = getFacebookProfileInfo();
+  if (info.name || info.profileUrl) {
+    chrome.runtime.sendMessage({
+      action: "FB_PROFILE_DETECTED",
+      fbName: info.name,
+      fbUrl: info.profileUrl,
+    }).catch(() => {});
+  }
+}, 1500);
+
 // Lắng nghe tín hiệu kiểm tra (Ping) và lệnh đăng bài (DO_POST)
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "PING") {
-    sendResponse({ pong: true, url: window.location.href });
+    const info = getFacebookProfileInfo();
+    sendResponse({
+      pong: true,
+      url: window.location.href,
+      fbName: info.name,
+      fbUrl: info.profileUrl,
+    });
     return true;
   }
 
@@ -148,19 +219,38 @@ async function handlePost(payload) {
   if (images && images.length > 0) {
     console.log(`[Social Desk] Bắt đầu tải và đính kèm ${images.length} ảnh...`);
 
-    // Tải trước toàn bộ file ảnh, nếu có ảnh lỗi thì dừng lại báo ngay
+    // Tải trước toàn bộ file ảnh bằng Base64 in-memory hoặc qua Background (tránh triệt để CORS & CSP của Facebook)
     const fileObjects = [];
     for (let i = 0; i < images.length; i++) {
       const imgUrl = images[i];
       try {
-        const res = await fetch(imgUrl, { mode: "cors" });
-        if (!res.ok) {
-          throw new Error(`Mã lỗi HTTP ${res.status}`);
+        let fileDataUrl = imgUrl;
+
+        // Nếu là URL mạng thông thường, nhờ Background Script tải để không bị chặn bởi CSP trang Facebook
+        if (!fileDataUrl.startsWith("data:")) {
+          fileDataUrl = await new Promise((resolve, reject) => {
+            chrome.runtime.sendMessage({ action: "FETCH_IMAGE", url: imgUrl }, (response) => {
+              if (chrome.runtime.lastError || !response || !response.success) {
+                reject(new Error(response?.error || chrome.runtime.lastError?.message || "Lỗi tải ảnh qua background"));
+              } else {
+                resolve(response.dataUrl);
+              }
+            });
+          });
         }
-        const blob = await res.blob();
-        const mime = blob.type || "image/jpeg";
+
+        // Chuyển Data URL (base64) thành File Object trong bộ nhớ
+        const arr = fileDataUrl.split(",");
+        const mimeMatch = arr[0].match(/:(.*?);/);
+        const mime = mimeMatch ? mimeMatch[1] : "image/jpeg";
         const ext = mime.includes("png") ? "png" : "jpg";
-        const file = new File([blob], `sd_img_${i + 1}.${ext}`, { type: mime });
+        const bstr = atob(arr[1]);
+        let n = bstr.length;
+        const u8arr = new Uint8Array(n);
+        while (n--) {
+          u8arr[n] = bstr.charCodeAt(n);
+        }
+        const file = new File([u8arr], `sd_img_${i + 1}.${ext}`, { type: mime });
         fileObjects.push(file);
       } catch (fetchErr) {
         return {

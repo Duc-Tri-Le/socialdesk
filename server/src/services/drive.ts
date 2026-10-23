@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import { z, type Ctx } from "@hatch/space-sdk";
 import { eq } from "drizzle-orm";
 import * as schema from "../schema";
@@ -132,9 +134,81 @@ export type DriveFetchResult =
   | { status: "no_link"; folderId: string; images: DriveImage[]; error: string }
   | { status: "error"; folderId: string; images: DriveImage[]; error: string };
 
+export const UPLOADS_DRIVE_DIR = path.resolve("./uploads/drive");
+
+export function ensureUploadsDriveDir(): void {
+  if (!fs.existsSync(UPLOADS_DRIVE_DIR)) {
+    fs.mkdirSync(UPLOADS_DRIVE_DIR, { recursive: true });
+  }
+}
+
+// Xóa các file ảnh cũ đã lưu trên đĩa của folder này ("xóa cũ")
+export function cleanOldDriveFolderFiles(folderId: string): void {
+  if (!folderId) return;
+  try {
+    ensureUploadsDriveDir();
+    const prefix = `${folderId}_`;
+    const files = fs.readdirSync(UPLOADS_DRIVE_DIR);
+    for (const f of files) {
+      if (f.startsWith(prefix)) {
+        try {
+          fs.unlinkSync(path.join(UPLOADS_DRIVE_DIR, f));
+        } catch {}
+      }
+    }
+  } catch (err) {
+    console.error(`[cleanOldDriveFolderFiles] Lỗi xóa file cũ folder ${folderId}:`, err);
+  }
+}
+
+// Tải ảnh từ Google Drive về lưu trữ trên server local ("lấy mới")
+export async function downloadAndSaveDriveImage(
+  folderId: string,
+  fileId: string,
+): Promise<{ localUrl: string; size: number } | null> {
+  try {
+    ensureUploadsDriveDir();
+    const fileName = `${folderId}_${fileId}.jpg`;
+    const filePath = path.join(UPLOADS_DRIVE_DIR, fileName);
+
+    const urlsToTry = [
+      `https://drive.google.com/thumbnail?id=${fileId}&sz=w1600`,
+      `https://drive.google.com/thumbnail?id=${fileId}&sz=w1200`,
+      `https://lh3.googleusercontent.com/d/${fileId}=w1600`,
+    ];
+
+    for (const url of urlsToTry) {
+      try {
+        const res = await fetch(url, {
+          headers: {
+            "User-Agent":
+              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          },
+        });
+        if (res.ok) {
+          const buf = Buffer.from(await res.arrayBuffer());
+          // Chỉ lưu nếu dung lượng > 1KB (tránh trang lỗi HTML 404 trả về 200)
+          if (buf.length > 1024) {
+            fs.writeFileSync(filePath, buf);
+            return { localUrl: `/uploads/drive/${fileName}`, size: buf.length };
+          }
+        }
+      } catch {
+        // Thử url dự phòng tiếp theo
+      }
+    }
+    return null;
+  } catch (err) {
+    console.error(`[downloadAndSaveDriveImage] Lỗi tải ảnh ${fileId}:`, err);
+    return null;
+  }
+}
+
 // Mở thư mục Drive của một link ảnh (hoặc folder id) và liệt kê ảnh
-// thật bên trong. Chỉ tính file image/* là ảnh. Lỗi quyền/không tìm
-// thấy/Drive chưa kết nối được dịch thành thông báo rõ ràng.
+// thật bên trong.
+// CHỈ QUÉT KHI ĐỒNG BỘ SHEET HOẶC BẤM "QUÉT LẠI ẢNH DRIVE".
+// Tự động: "xóa cũ lấy mới" — xóa ảnh cũ đã lưu trên đĩa của folder này,
+// tải toàn bộ ảnh mới về ./uploads/drive/ và lưu trữ cục bộ.
 export async function fetchDriveImages(
   ctx: Ctx,
   imageUrl: string,
@@ -198,23 +272,37 @@ export async function fetchDriveImages(
       error: "Drive trả dữ liệu không hợp lệ khi liệt kê thư mục ảnh.",
     };
   }
-  const images: DriveImage[] = [];
-  for (const f of files) {
+
+  // 1. "XÓA CŨ": Xóa toàn bộ file ảnh cũ trên đĩa của folder này
+  cleanOldDriveFolderFiles(folderId);
+
+  // 2. "LẤY MỚI": Lọc các file ảnh thật và tải về lưu cục bộ (./uploads/drive/)
+  const validFiles = files.filter(
+    (f) => (f.mimeType ?? "").startsWith("image/") && f.id,
+  );
+
+  const downloadPromises = validFiles.map(async (f) => {
     const mime = f.mimeType ?? "";
-    if (!mime.startsWith("image/") || !f.id) continue;
     const isHeic = /heic|heif/i.test(mime) || /\.hei[cf]$/i.test(f.name ?? "");
-    images.push({
-      id: f.id,
-      name: f.name ?? f.id,
+    const saved = await downloadAndSaveDriveImage(folderId, f.id!);
+    const localUrl = saved
+      ? saved.localUrl
+      : `https://drive.google.com/thumbnail?id=${f.id}&sz=w1600`;
+    const fileSize = saved ? saved.size : (Number(f.size ?? 0) || 0);
+
+    return {
+      id: f.id!,
+      name: f.name ?? f.id!,
       mime,
-      size: Number(f.size ?? 0) || 0,
-      // Bản JPEG dùng để đăng: Drive tự kết xuất JPEG từ file gốc
-      // (kể cả HEIC) qua thumbnail — ép cỡ lớn w1600.
-      jpeg_url: `https://drive.google.com/thumbnail?id=${f.id}&sz=w1600`,
-      view_url: f.webViewLink ?? "",
+      size: fileSize,
+      jpeg_url: localUrl,
+      view_url: f.webViewLink ?? `https://drive.google.com/file/d/${f.id}/view`,
       is_heic: isHeic,
-    });
-  }
+    };
+  });
+
+  const images: DriveImage[] = await Promise.all(downloadPromises);
+
   if (images.length === 0)
     return { status: "empty", folderId, images: [] };
   return { status: "ok", folderId, images };
@@ -261,7 +349,48 @@ export async function storeProductDriveImages(
     .where(eq(schema.products.id, productId));
 }
 
-// ------------------------------------------------------------ sheet import
-// Logic nhập sản phẩm dùng chung cho hai đường đồng bộ:
-//  - syncSheetNow: app tự đọc Sheet ngay trong lần bấm (privileged CLI).
-//  - importProductsFromSheet: task nền gọi lại với dữ liệu đã đọc.
+// Chuyển đổi danh sách ảnh (từ file local uploads/ hoặc URL HTTP) thành Base64 Data URL
+// giúp Chrome Extension gửi dữ liệu ảnh trực tiếp mà không bị chặn bởi CORS/CSP.
+export async function prepareDriveImagesAsDataUrls(
+  driveImages: DriveImage[],
+): Promise<string[]> {
+  const preparedImages: string[] = [];
+  for (const im of driveImages) {
+    const url = im.jpeg_url;
+    if (!url) continue;
+
+    // 1. Nếu là ảnh đã tải lưu trên server local (/uploads/...)
+    if (url.startsWith("/uploads/")) {
+      try {
+        const localPath = path.resolve("." + url);
+        if (fs.existsSync(localPath)) {
+          const buf = fs.readFileSync(localPath);
+          const base64 = buf.toString("base64");
+          preparedImages.push(`data:image/jpeg;base64,${base64}`);
+          continue;
+        }
+      } catch (err) {
+        console.error("[prepareDriveImagesAsDataUrls] Lỗi đọc ảnh local:", err);
+      }
+    }
+
+    // 2. Nếu là URL ngoài (http/https), fetch từ server
+    try {
+      const imgRes = await fetch(url);
+      if (imgRes.ok) {
+        const buf = await imgRes.arrayBuffer();
+        const base64 = Buffer.from(buf).toString("base64");
+        const mime = imgRes.headers.get("content-type") || "image/jpeg";
+        preparedImages.push(`data:${mime};base64,${base64}`);
+      } else {
+        preparedImages.push(url);
+      }
+    } catch {
+      preparedImages.push(url);
+    }
+  }
+  return preparedImages.length > 0
+    ? preparedImages
+    : driveImages.map((im) => im.jpeg_url);
+}
+

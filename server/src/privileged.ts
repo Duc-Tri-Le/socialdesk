@@ -10,7 +10,7 @@
 // instead of hanging forever on a "syncing" status.
 
 import { execFile } from "node:child_process";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, writeFile, readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import {
@@ -393,9 +393,15 @@ export const privilegedHandlers = definePrivilegedHandlers(privileged, {
       const item = args.urls[i];
       if (!item) continue;
       try {
-        const res = await fetch(item.url, { redirect: "follow" });
-        if (!res.ok) throw new Error(`HTTP ${res.status} khi tải ảnh`);
-        const buf = Buffer.from(await res.arrayBuffer());
+        let buf: Buffer;
+        if (item.url.startsWith("/uploads/")) {
+          const localPath = path.resolve("." + item.url);
+          buf = await readFile(localPath);
+        } else {
+          const res = await fetch(item.url, { redirect: "follow" });
+          if (!res.ok) throw new Error(`HTTP ${res.status} khi tải ảnh`);
+          buf = Buffer.from(await res.arrayBuffer());
+        }
         if (buf.length === 0) throw new Error("File ảnh tải về rỗng.");
         if (buf.length > 20 * 1024 * 1024)
           throw new Error("File ảnh quá lớn (hơn 20MB).");

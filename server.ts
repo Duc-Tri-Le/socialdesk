@@ -71,7 +71,7 @@ async function fetchGoogleSheetGrid(
     let sheetName = "";
     if (rawRange) {
       const match = rawRange.match(/^'?(.*?)'?!/);
-      if (match) {
+      if (match && match[1]) {
         sheetName = match[1];
       } else {
         sheetName = rawRange.replace(/^'|'$/g, "").trim();
@@ -246,8 +246,10 @@ async function fetchGoogleDriveFolder(folderId: string) {
     const seen = new Set<string>();
 
     while ((match = regex.exec(text)) !== null) {
-      const name = match[1];
-      let id = match[2].replace(/-\d+-\d+$/, "");
+      const name = match[1] || "";
+      const rawId = match[2];
+      if (!rawId) continue;
+      let id = rawId.replace(/-\d+-\d+$/, "");
       if (!seen.has(id)) {
         seen.add(id);
         const ext = name.split(".").pop()?.toLowerCase() || "";
@@ -313,7 +315,7 @@ const ctx = {
     };
   },
   inference: {
-    async complete(prompt: string, opts?: any) {
+    async complete(_prompt: string, _opts?: any) {
       // Mặc định fallback về mẫu viết bài ĐỨC GARAGE nếu chưa cấu hình API key AI
       throw new Error("Local AI inference not configured, falling back to template.");
     },
@@ -331,7 +333,7 @@ const ctx = {
     async getUrl(key: string) {
       return `/uploads/${key}`;
     },
-    async put(key: string, data: any, opts?: any) {
+    async put(key: string, data: any, _opts?: any) {
       const targetPath = path.join(uploadsDir, key);
       fs.writeFileSync(targetPath, Buffer.from(data));
       return { key };
@@ -450,7 +452,7 @@ const server = Bun.serve<ExtensionWsData>({
     });
   },
   websocket: {
-    open(ws) {
+    open(_ws) {
       console.log(`[WebSocket] Một Chrome Extension vừa kết nối.`);
     },
     message(ws, message) {
@@ -464,7 +466,32 @@ const server = Bun.serve<ExtensionWsData>({
             ws.data.code = code;
             extensionSockets.set(code, ws);
             console.log(`[WebSocket] ✓ Đã ghi nhận Chrome Extension mã: [${code}]`);
-            ws.send(JSON.stringify({ type: "REGISTER_OK", code }));
+
+            const fbName = (data.fbName || "").trim();
+            const fbUrl = (data.fbUrl || "").trim();
+
+            // Tự động đồng bộ tài khoản Facebook lấy tên nick từ Facebook
+            try {
+              const rows = sqlite.query("SELECT * FROM accounts WHERE extension_code = ?").all(code) as any[];
+              if (rows.length === 0) {
+                const autoName = fbName || `Nick Facebook ${code}`;
+                sqlite.run(
+                  "INSERT INTO accounts (platform, name, handle, profile_url, extension_code, linked, selected, created_at) VALUES (?, ?, ?, ?, ?, 1, 1, ?)",
+                  ["Facebook", autoName, "Tài khoản Chrome Extension", fbUrl, code, Date.now()]
+                );
+                console.log(`[WebSocket] ✓ Tự động tạo tài khoản Facebook: "${autoName}" từ Chrome [${code}]`);
+              } else if (fbName && rows[0].name !== fbName) {
+                sqlite.run(
+                  "UPDATE accounts SET name = ?, profile_url = COALESCE(NULLIF(?, ''), profile_url) WHERE id = ?",
+                  [fbName, fbUrl, rows[0].id]
+                );
+                console.log(`[WebSocket] ✓ Cập nhật tên nick Facebook thành "${fbName}" cho mã [${code}]`);
+              }
+            } catch (dbErr) {
+              console.warn("[WebSocket] Lỗi đồng bộ tài khoản:", dbErr);
+            }
+
+            ws.send(JSON.stringify({ type: "REGISTER_OK", code, fbName }));
           }
         } else if (data.type === "PING") {
           ws.send(JSON.stringify({ type: "PONG" }));

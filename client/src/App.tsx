@@ -13,10 +13,41 @@ import { QueueSection } from "./components/tabs/QueueSection";
 import { AnalyticsSection } from "./components/tabs/AnalyticsSection";
 import { MediaSection } from "./components/tabs/MediaSection";
 
+function getInitialTab(): Tab {
+  try {
+    const hash = window.location.hash.replace(/^#/, "");
+    if (TABS.some((t) => t.id === hash)) return hash as Tab;
+    const saved = localStorage.getItem("socialdesk_active_tab");
+    if (saved && TABS.some((t) => t.id === saved)) return saved as Tab;
+  } catch {}
+  return "overview";
+}
+
 export function App() {
-  const [tab, setTab] = useState<Tab>("overview");
+  const [tab, setTabState] = useState<Tab>(getInitialTab);
   const queryClient = useQueryClient();
   const seeded = useRef(false);
+
+  const setTab = (nextTab: Tab) => {
+    setTabState(nextTab);
+    try {
+      localStorage.setItem("socialdesk_active_tab", nextTab);
+      if (window.location.hash.replace(/^#/, "") !== nextTab) {
+        window.location.hash = nextTab;
+      }
+    } catch {}
+  };
+
+  useEffect(() => {
+    const onHashChange = () => {
+      const h = window.location.hash.replace(/^#/, "");
+      if (TABS.some((t) => t.id === h)) {
+        setTabState(h as Tab);
+      }
+    };
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
 
   const seed = useMutation({
     mutationFn: () => api.seedDesk({}),

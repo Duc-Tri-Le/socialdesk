@@ -214,7 +214,7 @@ export function GroupsSection() {
                         <span className="min-w-0 flex-1 truncate">
                           {m.identity_name}{" "}
                           <span className="text-xs text-[var(--dim)]">
-                            ({m.identity_kind === "page" ? "Page" : "Tài khoản"})
+                            ({m.identity_kind === "page" ? "Fanpage" : "Nick Facebook"})
                           </span>
                         </span>
                         <span

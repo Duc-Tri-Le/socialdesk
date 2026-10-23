@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, type FormEvent } from "react";
+import { useState, useRef, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api";
 import type { Product, SheetConfig, SheetSource } from "../../types";
@@ -7,10 +7,7 @@ import { fmtDate, shortenSyncMessage } from "../../utils/format";
 import { Hint } from "../ui/Hint";
 import { SheetImagePreview } from "../ui/SheetImagePreview";
 import {
-  PRODUCT_PAGE_SIZE,
-  type ProductSort,
-  filterProductsBySearch,
-  sortProducts,
+  useProductFilterPagination,
   ProductListCard,
   ProductListControls,
   ProductListPagination,
@@ -22,31 +19,21 @@ export function ProductsSection() {
     queryKey: ["products"],
     queryFn: () => api.listProducts({}),
   });
-  const [productPage, setProductPage] = useState(1);
-  const [productSearch, setProductSearch] = useState("");
-  const [productSort, setProductSort] = useState<ProductSort>("default");
   const allProducts: Product[] = products.data?.products ?? [];
-  const productSearchNeedle = productSearch.trim().toLowerCase();
-  const filteredProducts = sortProducts(
-    filterProductsBySearch(allProducts, productSearchNeedle),
-    productSort,
-  );
-  const productTotal = filteredProducts.length;
-  const productTotalPages = Math.max(
-    1,
-    Math.ceil(productTotal / PRODUCT_PAGE_SIZE),
-  );
-  const safeProductPage = Math.min(productPage, productTotalPages);
-  const productRangeStart =
-    productTotal === 0 ? 0 : (safeProductPage - 1) * PRODUCT_PAGE_SIZE + 1;
-  const productRangeEnd = Math.min(
-    productTotal,
-    safeProductPage * PRODUCT_PAGE_SIZE,
-  );
-  const pagedProducts = filteredProducts.slice(
-    (safeProductPage - 1) * PRODUCT_PAGE_SIZE,
-    safeProductPage * PRODUCT_PAGE_SIZE,
-  );
+  const {
+    search: productSearch,
+    setSearch: setProductSearch,
+    sort: productSort,
+    setSort: setProductSort,
+    page: safeProductPage,
+    setPage: setProductPage,
+    total: productTotal,
+    totalPages: productTotalPages,
+    rangeStart: productRangeStart,
+    rangeEnd: productRangeEnd,
+    pagedProducts,
+    pageNumbers: productPageNumbers,
+  } = useProductFilterPagination(allProducts);
   // Số có/chưa có ảnh THẬT (đã lấy được file từ Drive) của các sản
   // phẩm nguồn Sheet — dùng cho dòng tóm tắt đồng bộ rút gọn.
   const sheetProductsAll = allProducts.filter((p) => p.source === "sheet");
@@ -58,23 +45,6 @@ export function ProductsSection() {
             .length,
         }
       : undefined;
-  useEffect(() => {
-    if (productPage > productTotalPages) setProductPage(productTotalPages);
-  }, [productPage, productTotalPages]);
-  const productPageNumbers: number[] = (() => {
-    if (productTotalPages <= 7)
-      return Array.from({ length: productTotalPages }, (_, i) => i + 1);
-    const wanted = new Set<number>([
-      1,
-      productTotalPages,
-      safeProductPage - 1,
-      safeProductPage,
-      safeProductPage + 1,
-    ]);
-    return [...wanted]
-      .filter((n) => n >= 1 && n <= productTotalPages)
-      .sort((a, b) => a - b);
-  })();
   const sheet = useQuery({
     queryKey: ["sheet"],
     queryFn: () => api.getSheetConfig({}),

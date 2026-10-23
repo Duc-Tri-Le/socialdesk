@@ -7,6 +7,7 @@ import {
   parseDriveImages,
   extractDriveFolderId,
   driveImageSchema,
+  prepareDriveImagesAsDataUrls,
   type DriveImage,
 } from "../services/drive";
 import {
@@ -28,6 +29,7 @@ import {
   serializePackTargets,
   pruneSupersededPublishRecords,
   pruneAllSupersededPublishRecords,
+  updatePublishOutcomeRecord,
   buildPackTextForDraft,
   defaultPackTargets,
   parseFbPages,
@@ -1249,7 +1251,7 @@ export const draftActions = {
             continue;
           }
           const via = viaIdentities.map((i) =>
-            i.kind === "page" ? `Page “${i.name}”` : `tài khoản ${i.name}`,
+            i.kind === "page" ? `Page “${i.name}”` : `nick “${i.name}”`,
           );
           const recordId = await record({
             kind: "group",
@@ -1279,7 +1281,9 @@ export const draftActions = {
           .where(eq(schema.accounts.platform, "Facebook"));
         const defaultAcc = allFbAccounts.find((a) => a.selected === 1) || allFbAccounts[0];
 
-        const imageUrls = driveImages.map((im) => im.jpeg_url);
+        // Chuyển đổi ảnh sang Data URL (base64) tại server để Extension không bị chặn bởi CORS/CSP của Facebook.
+        const finalImages = await prepareDriveImagesAsDataUrls(driveImages);
+
 
         for (const t of browserQueue) {
           const kindLabel = t.kind === "group" ? "Nhóm" : "Fanpage";
@@ -1334,7 +1338,7 @@ export const draftActions = {
                 targetName: t.name,
                 targetUrl: t.url || "https://www.facebook.com/",
                 caption: caption,
-                images: imageUrls,
+                images: finalImages,
               };
 
               sendTask(extCode, taskPayload, 90000)
@@ -1491,19 +1495,6 @@ export const draftActions = {
       const db = ctx.db<typeof schema>();
       let updated = 0;
       for (const o of args.outcomes) {
-        const records = await db
-          .select()
-          .from(schema.publishRecords)
-          .where(eq(schema.publishRecords.draftId, args.draft_id));
-        const queued = records
-          .filter(
-            (p) =>
-              p.targetKind === "group" &&
-              normalizeNameKey(p.targetName) ===
-                normalizeNameKey(o.group_name) &&
-              p.status === "queued",
-          )
-          .sort((a, b) => b.id - a.id)[0];
         const message =
           o.message.trim() ||
           (o.status === "published"
@@ -1511,35 +1502,14 @@ export const draftActions = {
             : o.status === "needs_login"
               ? `Nhóm ${o.group_name}: đang chờ bạn đăng nhập Facebook trong cửa sổ trình duyệt Muse — đăng nhập 1 lần trong cửa sổ đó (phiên được lưu cho lần sau) rồi bấm Đăng Bài lại.`
               : `Nhóm ${o.group_name}: đăng không thành công.`);
-        let affectedId = queued?.id ?? 0;
-        if (queued) {
-          await db
-            .update(schema.publishRecords)
-            .set({
-              status: o.status,
-              // Link bài chỉ nhận khi agent thật sự trả về — không
-              // tự dựng link từ tên/ID nhóm.
-              postUrl: o.status === "published" ? o.post_url.trim() : "",
-              message,
-            })
-            .where(eq(schema.publishRecords.id, queued.id));
-        } else {
-          const [ins] = await db
-            .insert(schema.publishRecords)
-            .values({
-              draftId: args.draft_id,
-              targetKind: "group",
-              targetName: o.group_name,
-              status: o.status,
-              postUrl: o.status === "published" ? o.post_url.trim() : "",
-              message,
-            })
-            .returning({ id: schema.publishRecords.id });
-          affectedId = ins?.id ?? 0;
-        }
-        // Kết quả mới thay thế các bản ghi cũ chưa thành công của
-        // cùng nhóm — xóa hẳn để lịch sử chỉ còn thông tin mới.
-        await pruneSupersededPublishRecords(db, affectedId);
+        await updatePublishOutcomeRecord(db, {
+          draftId: args.draft_id,
+          targetKind: "group",
+          targetName: o.group_name,
+          status: o.status,
+          postUrl: o.post_url,
+          message,
+        });
         updated += 1;
       }
       ctx.invalidateQueries();
@@ -1580,18 +1550,6 @@ export const draftActions = {
       const db = ctx.db<typeof schema>();
       let updated = 0;
       for (const o of args.outcomes) {
-        const records = await db
-          .select()
-          .from(schema.publishRecords)
-          .where(eq(schema.publishRecords.draftId, args.draft_id));
-        const queued = records
-          .filter(
-            (p) =>
-              p.targetKind === o.kind &&
-              normalizeNameKey(p.targetName) === normalizeNameKey(o.name) &&
-              p.status === "queued",
-          )
-          .sort((a, b) => b.id - a.id)[0];
         const kindLabel = o.kind === "group" ? "Nhóm" : "Page";
         const message =
           o.message.trim() ||
@@ -1600,35 +1558,14 @@ export const draftActions = {
             : o.status === "needs_login"
               ? `${kindLabel} ${o.name}: đang chờ bạn đăng nhập Facebook trong cửa sổ trình duyệt Muse — cửa sổ đó đang mở ở trang đăng nhập; đăng nhập 1 lần bằng tài khoản quản trị Page (phiên được lưu cho mọi lần sau) rồi bấm Đăng Bài lại là đăng tiếp.`
               : `${kindLabel} ${o.name}: đăng không thành công.`);
-        let affectedId = queued?.id ?? 0;
-        if (queued) {
-          await db
-            .update(schema.publishRecords)
-            .set({
-              status: o.status,
-              // Link bài chỉ nhận khi agent thật sự trả về — không
-              // tự dựng link từ tên/ID đích.
-              postUrl: o.status === "published" ? o.post_url.trim() : "",
-              message,
-            })
-            .where(eq(schema.publishRecords.id, queued.id));
-        } else {
-          const [ins] = await db
-            .insert(schema.publishRecords)
-            .values({
-              draftId: args.draft_id,
-              targetKind: o.kind,
-              targetName: o.name,
-              status: o.status,
-              postUrl: o.status === "published" ? o.post_url.trim() : "",
-              message,
-            })
-            .returning({ id: schema.publishRecords.id });
-          affectedId = ins?.id ?? 0;
-        }
-        // Kết quả mới thay thế các bản ghi cũ chưa thành công của
-        // cùng đích — xóa hẳn để lịch sử chỉ còn thông tin mới.
-        await pruneSupersededPublishRecords(db, affectedId);
+        await updatePublishOutcomeRecord(db, {
+          draftId: args.draft_id,
+          targetKind: o.kind,
+          targetName: o.name,
+          status: o.status,
+          postUrl: o.post_url,
+          message,
+        });
         updated += 1;
       }
       ctx.invalidateQueries();
@@ -1665,18 +1602,6 @@ export const draftActions = {
       const db = ctx.db<typeof schema>();
       let updated = 0;
       for (const o of args.outcomes) {
-        const records = await db
-          .select()
-          .from(schema.publishRecords)
-          .where(eq(schema.publishRecords.draftId, args.draft_id));
-        const queued = records
-          .filter(
-            (p) =>
-              p.targetKind === "instagram" &&
-              normalizeNameKey(p.targetName) === normalizeNameKey(o.name) &&
-              p.status === "queued",
-          )
-          .sort((a, b) => b.id - a.id)[0];
         const message =
           o.message.trim() ||
           (o.status === "published"
@@ -1684,38 +1609,14 @@ export const draftActions = {
             : o.status === "uncertain"
               ? `Instagram ${o.name}: lượt đăng bị ngắt giữa chừng — chưa xác định được bài đã lên hay chưa, kiểm tra Instagram trước khi bấm đăng lại.`
               : `Instagram ${o.name}: đăng không thành công.`);
-        let affectedId = queued?.id ?? 0;
-        if (queued) {
-          await db
-            .update(schema.publishRecords)
-            .set({
-              status: o.status,
-              // Link bài chỉ nhận khi agent thật sự trả về — không
-              // tự dựng link từ tên tài khoản.
-              postUrl: o.status === "published" ? o.post_url.trim() : "",
-              message,
-            })
-            .where(eq(schema.publishRecords.id, queued.id));
-        } else {
-          const [ins] = await db
-            .insert(schema.publishRecords)
-            .values({
-              draftId: args.draft_id,
-              targetKind: "instagram",
-              targetName: o.name,
-              status: o.status,
-              postUrl: o.status === "published" ? o.post_url.trim() : "",
-              message,
-            })
-            .returning({ id: schema.publishRecords.id });
-          affectedId = ins?.id ?? 0;
-        }
-        // Kết quả mới thay thế các bản ghi cũ chưa thành công của
-        // cùng tài khoản — xóa hẳn để lịch sử chỉ còn thông tin
-        // mới ("uncertain" cũ không bị xóa bởi cơ chế này vì nó
-        // là căn cứ kiểm tra trùng; bản ghi vừa cập nhật chính
-        // là bản mới nhất của đích).
-        await pruneSupersededPublishRecords(db, affectedId);
+        await updatePublishOutcomeRecord(db, {
+          draftId: args.draft_id,
+          targetKind: "instagram",
+          targetName: o.name,
+          status: o.status,
+          postUrl: o.post_url,
+          message,
+        });
         updated += 1;
       }
       ctx.invalidateQueries();

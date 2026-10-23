@@ -173,6 +173,66 @@ export async function pruneAllSupersededPublishRecords(db: Db): Promise<number> 
   return removed;
 }
 
+// Cập nhật kết quả đăng bài cho một đích (nhóm, page, instagram):
+// Tìm bản ghi đang "queued" của cùng đích trong bản nháp đó để cập nhật,
+// hoặc tạo bản ghi mới nếu không có. Sau đó tự động dọn dẹp các bản ghi cũ
+// đã bị thay thế (pruneSupersededPublishRecords).
+export async function updatePublishOutcomeRecord(
+  db: Db,
+  args: {
+    draftId: number;
+    targetKind: "group" | "page" | "instagram" | "account";
+    targetName: string;
+    status: "published" | "failed" | "needs_login" | "uncertain" | "skipped" | "unsupported" | "queued";
+    postUrl?: string;
+    message: string;
+  },
+): Promise<number> {
+  const records = await db
+    .select()
+    .from(schema.publishRecords)
+    .where(eq(schema.publishRecords.draftId, args.draftId));
+  const queued = records
+    .filter(
+      (p) =>
+        p.targetKind === args.targetKind &&
+        normalizeNameKey(p.targetName) === normalizeNameKey(args.targetName) &&
+        p.status === "queued",
+    )
+    .sort((a, b) => b.id - a.id)[0];
+
+  const postUrl = args.status === "published" ? (args.postUrl ?? "").trim() : "";
+  let affectedId = queued?.id ?? 0;
+
+  if (queued) {
+    await db
+      .update(schema.publishRecords)
+      .set({
+        status: args.status,
+        postUrl,
+        message: args.message,
+      })
+      .where(eq(schema.publishRecords.id, queued.id));
+  } else {
+    const [ins] = await db
+      .insert(schema.publishRecords)
+      .values({
+        draftId: args.draftId,
+        targetKind: args.targetKind,
+        targetName: args.targetName,
+        status: args.status,
+        postUrl,
+        message: args.message,
+      })
+      .returning({ id: schema.publishRecords.id });
+    affectedId = ins?.id ?? 0;
+  }
+
+  await pruneSupersededPublishRecords(db, affectedId);
+  return affectedId;
+}
+
+
 // Đích đăng đã lưu cho một bản nháp (cột pack_targets, JSON).
 // saved = false khi bản nháp chưa từng có lựa chọn nào được lưu —
 // client khi đó mới suy lựa chọn từ các cờ chọn mặc định (nhóm
@@ -597,7 +657,7 @@ export async function buildPackTextForDraft(
                 const label =
                   i.kind === "page"
                     ? `Page “${i.name}”`
-                    : `Tài khoản chính ${i.name}`;
+                    : `Nick “${i.name}”`;
                 return membershipStatusOf(joinCtx, g, i) === "joined"
                   ? `  - ${label}: Đã tham gia — đăng được bằng danh tính này`
                   : `  - ${label}: Chưa tham gia — KHÔNG đăng bằng danh tính này`;

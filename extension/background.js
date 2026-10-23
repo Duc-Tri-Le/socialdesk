@@ -102,15 +102,20 @@ async function connectWebSocket() {
       updateBadge(true);
       addLog(`Đã kết nối Social Desk tại ${wsUrl}`, "success");
 
-      // Đăng ký mã Chrome này với máy chủ
-      if (code) {
-        socket.send(JSON.stringify({
-          type: "REGISTER_EXTENSION",
-          code: code,
-          time: Date.now()
-        }));
-        addLog(`Đã đăng ký mã nhận diện: [${code}]`, "success");
-      }
+      // Đăng ký mã Chrome này với máy chủ kèm tên nick Facebook nếu có
+      chrome.storage.local.get(["extensionCode", "fbName", "fbUrl"]).then((stored) => {
+        const c = (stored.extensionCode || code || "").trim().toUpperCase();
+        if (c && socket && socket.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify({
+            type: "REGISTER_EXTENSION",
+            code: c,
+            fbName: stored.fbName || "",
+            fbUrl: stored.fbUrl || "",
+            time: Date.now()
+          }));
+          addLog(`Đã đăng ký mã nhận diện: [${c}]` + (stored.fbName ? ` (Nick: ${stored.fbName})` : ""), "success");
+        }
+      });
 
       // Khởi động chu kỳ Heartbeat PING/PONG kiểm tra kết nối sống
       heartbeatTimer = setInterval(() => {
@@ -357,8 +362,33 @@ function waitForTabComplete(tabId, timeoutMs = 25000) {
   });
 }
 
-// Lắng nghe message từ Popup Extension
+// Lắng nghe message từ Popup và Content Script
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.action === "FB_PROFILE_DETECTED") {
+    const { fbName, fbUrl } = request;
+    if (fbName) {
+      chrome.storage.local.set({ fbName, fbUrl });
+      addLog(`Phát hiện nick Facebook: ${fbName}`, "success");
+    }
+    // Gửi cập nhật tên nick lên server ngay
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      chrome.storage.local.get(["extensionCode"]).then((data) => {
+        const code = (data.extensionCode || "").trim().toUpperCase();
+        if (code) {
+          socket.send(JSON.stringify({
+            type: "REGISTER_EXTENSION",
+            code: code,
+            fbName: fbName || "",
+            fbUrl: fbUrl || "",
+            time: Date.now(),
+          }));
+        }
+      });
+    }
+    sendResponse({ received: true });
+    return true;
+  }
+
   if (request.action === "GET_STATUS") {
     chrome.storage.local.get("logs").then((data) => {
       sendResponse({
@@ -368,6 +398,22 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }).catch(() => {
       sendResponse({ connected: isConnected, logs: [] });
     });
+    return true;
+  }
+
+  if (request.action === "FETCH_IMAGE") {
+    fetch(request.url)
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.blob();
+      })
+      .then((blob) => {
+        const reader = new FileReader();
+        reader.onloadend = () => sendResponse({ success: true, dataUrl: reader.result });
+        reader.onerror = (e) => sendResponse({ success: false, error: e.message });
+        reader.readAsDataURL(blob);
+      })
+      .catch((err) => sendResponse({ success: false, error: err.message }));
     return true;
   }
 

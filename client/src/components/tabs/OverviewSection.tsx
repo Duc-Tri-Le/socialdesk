@@ -246,40 +246,43 @@ export function LoggedInSummary({
                         href={a.profile_url}
                         target="_blank"
                         rel="noreferrer"
-                        aria-label={`Mở trang ${a.platform} của ${a.name}`}
-                        className="font-semibold text-[var(--accent-ink)] underline decoration-dotted underline-offset-2"
+                        aria-label={`Mở trang của ${a.name}`}
+                        className="font-bold text-[var(--accent-ink)] underline decoration-dotted underline-offset-2"
                       >
-                        {a.platform} — {a.name} ↗
+                        {a.name} ↗
                       </a>
                     ) : (
-                      <span className="font-semibold">
-                        {a.platform} — {a.name}
-                      </span>
+                      <span className="font-bold">{a.name}</span>
                     )}
+                    <span className="rounded bg-[var(--surface-alt)] px-1.5 py-0.5 text-[10px] text-[var(--dim)] font-semibold">
+                      {a.platform === "Facebook" ? "Nick Facebook" : "Instagram"}
+                    </span>
                     <span className="text-xs text-[var(--dim)]">
                       đang đăng nhập · dùng để đăng bài
                     </span>
                   </div>
                   {myPages.length > 0 && (
-                    <ul className="ml-5 mt-1 space-y-0.5">
+                    <ul className="ml-5 mt-1 space-y-1">
                       {myPages.map((p) => (
                         <li
                           key={p.id}
-                          className="text-xs text-[var(--dim)]"
+                          className="text-xs flex items-center gap-1.5"
                         >
-                          Page đăng bài:{" "}
+                          <span className="rounded bg-indigo-500/15 px-1.5 py-0.5 text-[10px] font-bold text-indigo-400">
+                            Fanpage
+                          </span>
                           {p.url ? (
                             <a
                               href={p.url}
                               target="_blank"
                               rel="noreferrer"
                               aria-label={`Mở Page ${p.name}`}
-                              className="font-semibold text-[var(--accent-ink)] underline decoration-dotted underline-offset-2"
+                              className="font-bold text-[var(--accent-ink)] underline decoration-dotted underline-offset-2"
                             >
                               {p.name} ↗
                             </a>
                           ) : (
-                            <span className="font-semibold">{p.name}</span>
+                            <span className="font-bold">{p.name}</span>
                           )}
                         </li>
                       ))}
@@ -310,8 +313,21 @@ export function LoggedInSummary({
                     aria-hidden
                     className="h-2.5 w-2.5 shrink-0 rounded-full border border-[var(--border)] bg-[var(--surface-alt)]"
                   />
-                  <span className="font-semibold">
-                    {a.platform} — {a.name}
+                  {a.profile_url ? (
+                    <a
+                      href={a.profile_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      aria-label={`Mở trang của ${a.name}`}
+                      className="font-bold text-[var(--accent-ink)] underline decoration-dotted underline-offset-2"
+                    >
+                      {a.name} ↗
+                    </a>
+                  ) : (
+                    <span className="font-bold">{a.name}</span>
+                  )}
+                  <span className="rounded bg-[var(--surface-alt)] px-1.5 py-0.5 text-[10px] text-[var(--dim)] font-semibold">
+                    {a.platform === "Facebook" ? "Nick Facebook" : "Instagram"}
                   </span>
                   <span className="text-xs text-[var(--dim)]">
                     đã liên kết nhưng chưa dùng để đăng
@@ -320,7 +336,7 @@ export function LoggedInSummary({
                     className="rounded-full bg-[var(--accent)] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
                     disabled={enable.isPending}
                     onClick={() => enable.mutate(a.id)}
-                    aria-label={`Bật dùng để đăng cho ${a.platform} ${a.name}`}
+                    aria-label={`Bật dùng để đăng cho nick ${a.name}`}
                   >
                     Bật dùng để đăng
                   </button>

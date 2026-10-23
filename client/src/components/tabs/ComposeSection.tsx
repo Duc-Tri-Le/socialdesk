@@ -1,4 +1,4 @@
-import { useState, useEffect, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, type ApiResponse } from "../../api";
 import type { Product } from "../../types";
@@ -7,10 +7,7 @@ import { driveStatusLabel, fileToBase64 } from "../../utils/format";
 import { Hint } from "../ui/Hint";
 import { SheetImagePreview } from "../ui/SheetImagePreview";
 import {
-  PRODUCT_PAGE_SIZE,
-  type ProductSort,
-  filterProductsBySearch,
-  sortProducts,
+  useProductFilterPagination,
   ProductListCard,
   ProductListControls,
   ProductListPagination,
@@ -72,48 +69,21 @@ export function ComposeSection({
   // Danh sách chọn sản phẩm bên dưới: tìm kiếm + phân trang 10 sản
   // phẩm/trang như mục Sản phẩm. Đổi từ khóa tìm kiếm thì quay về
   // trang 1; chuyển trang giữ nguyên từ khóa đang tìm.
-  const [listSearch, setListSearch] = useState("");
-  const [listSort, setListSort] = useState<ProductSort>("default");
-  const [listPage, setListPage] = useState(1);
   const allComposeProducts: Product[] = products.data?.products ?? [];
-  const searchNeedle = listSearch.trim().toLowerCase();
-  const filteredComposeProducts = sortProducts(
-    filterProductsBySearch(allComposeProducts, searchNeedle),
-    listSort,
-  );
-  const composeTotal = filteredComposeProducts.length;
-  const composeTotalPages = Math.max(
-    1,
-    Math.ceil(composeTotal / PRODUCT_PAGE_SIZE),
-  );
-  const safeListPage = Math.min(listPage, composeTotalPages);
-  const composeRangeStart =
-    composeTotal === 0 ? 0 : (safeListPage - 1) * PRODUCT_PAGE_SIZE + 1;
-  const composeRangeEnd = Math.min(
-    composeTotal,
-    safeListPage * PRODUCT_PAGE_SIZE,
-  );
-  const pagedComposeProducts = filteredComposeProducts.slice(
-    (safeListPage - 1) * PRODUCT_PAGE_SIZE,
-    safeListPage * PRODUCT_PAGE_SIZE,
-  );
-  useEffect(() => {
-    if (listPage > composeTotalPages) setListPage(composeTotalPages);
-  }, [listPage, composeTotalPages]);
-  const composePageNumbers: number[] = (() => {
-    if (composeTotalPages <= 7)
-      return Array.from({ length: composeTotalPages }, (_, i) => i + 1);
-    const wanted = new Set<number>([
-      1,
-      composeTotalPages,
-      safeListPage - 1,
-      safeListPage,
-      safeListPage + 1,
-    ]);
-    return [...wanted]
-      .filter((n) => n >= 1 && n <= composeTotalPages)
-      .sort((a, b) => a - b);
-  })();
+  const {
+    search: listSearch,
+    setSearch: setListSearch,
+    sort: listSort,
+    setSort: setListSort,
+    page: safeListPage,
+    setPage: setListPage,
+    total: composeTotal,
+    totalPages: composeTotalPages,
+    rangeStart: composeRangeStart,
+    rangeEnd: composeRangeEnd,
+    pagedProducts: pagedComposeProducts,
+    pageNumbers: composePageNumbers,
+  } = useProductFilterPagination(allComposeProducts);
   const [form, setForm] = useState<DraftFormState>(EMPTY_DRAFT_FORM);
 
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
