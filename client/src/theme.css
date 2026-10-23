@@ -21,8 +21,9 @@
   --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
 }
 
-:root {
-  color-scheme: light dark;
+:root,
+:root[data-theme="light"] {
+  color-scheme: light;
   --bg: #f4f4f2;
   --surface: #ffffff;
   --surface-alt: #eceae4;
@@ -43,8 +44,26 @@
   --space-accent: var(--accent);
 }
 
+:root[data-theme="dark"],
+.dark {
+  color-scheme: dark;
+  --bg: #171512;
+  --surface: #221f1b;
+  --surface-alt: #2c2822;
+  --text: #f2efe9;
+  --dim: #a39e94;
+  --border: #3a362e;
+  --accent: #f0a832;
+  --accent-ink: #f5c063;
+  --info: #60a5fa;
+  --ok: #4ade80;
+  --warn: #fbbf24;
+  --danger: #f87171;
+}
+
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
     --bg: #171512;
     --surface: #221f1b;
     --surface-alt: #2c2822;

@@ -8,6 +8,18 @@
          lives outside the space's routes and fails auth. -->
     <link rel="icon" href="data:," />
     <title>Social Desk</title>
+    <script>
+      (function() {
+        try {
+          var t = localStorage.getItem('socialdesk_theme');
+          if (!t) {
+            t = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+          }
+          document.documentElement.setAttribute('data-theme', t);
+          if (t === 'dark') document.documentElement.classList.add('dark');
+        } catch (e) {}
+      })();
+    </script>
     <script src="./src/main.tsx" type="module"></script>
   </head>
   <body>
