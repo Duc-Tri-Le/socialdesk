@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Social Desk Connector</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="card">
+    <!-- Header -->
+    <header class="header">
+      <div class="logo-wrap">
+        <img src="../icons/icon.webp" alt="Social Desk" class="logo">
+        <div>
+          <h1 class="title">Social Desk</h1>
+          <p class="subtitle">Chrome Profile Connector</p>
+        </div>
+      </div>
+      <div id="statusBadge" class="status-badge status-offline">
+        <span class="status-dot"></span>
+        <span id="statusText">Đang kết nối...</span>
+      </div>
+    </header>
+
+    <!-- Main Code Box -->
+    <div class="code-box">
+      <span class="code-label">MÃ KẾT NỐI CHROME NÀY</span>
+      <div class="code-display-row">
+        <span id="extensionCode" class="code-value">ĐANG TẢI...</span>
+        <button id="copyBtn" class="btn btn-copy" title="Sao chép mã này">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+          </svg>
+          <span id="copyBtnText">Sao chép</span>
+        </button>
+      </div>
+      <div class="code-actions">
+        <button id="editCodeBtn" class="btn-link">Đổi mã / Đặt tên riêng</button>
+        <button id="refreshCodeBtn" class="btn-link">Sinh mã mới</button>
+      </div>
+      <div id="editCodeRow" class="edit-row" style="display: none;">
+        <input type="text" id="customCodeInput" placeholder="Ví dụ: NICK-1, CHROME-A..." maxlength="20">
+        <button id="saveCustomCodeBtn" class="btn btn-primary btn-sm">Lưu</button>
+        <button id="cancelCustomCodeBtn" class="btn btn-secondary btn-sm">Hủy</button>
+      </div>
+    </div>
+
+    <!-- Quick Instructions -->
+    <div class="guide-box">
+      <div class="guide-title">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="12" y1="16" x2="12" y2="12"></line>
+          <line x1="12" y1="8" x2="12.01" y2="8"></line>
+        </svg>
+        Cách sử dụng
+      </div>
+      <ol class="guide-steps">
+        <li>Bấm <strong>Sao chép</strong> mã ở trên.</li>
+        <li>Mở Social Desk &rarr; mục <strong>Tài khoản</strong> &rarr; dán vào ô <strong>Mã Extension</strong> của nick Facebook này.</li>
+        <li>Khi bấm <strong>Đăng bài</strong>, Social Desk sẽ tự động mở cửa sổ Chrome này để đăng!</li>
+      </ol>
+    </div>
+
+    <!-- Server Settings & Reconnect -->
+    <div class="settings-box">
+      <div class="settings-header" id="toggleSettings">
+        <span>Cấu hình máy chủ</span>
+        <svg class="chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="6 9 12 15 18 9"></polyline>
+        </svg>
+      </div>
+      <div id="settingsBody" class="settings-body" style="display: none;">
+        <label for="serverUrlInput" class="setting-label">Địa chỉ máy chủ Social Desk:</label>
+        <div class="setting-row">
+          <input type="text" id="serverUrlInput" value="http://localhost:3000" placeholder="http://localhost:3000">
+          <button id="saveServerBtn" class="btn btn-primary btn-sm">Kết nối</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Recent Activity Log -->
+    <div class="logs-box">
+      <div class="logs-header">
+        <span>Nhật ký hoạt động</span>
+        <button id="clearLogsBtn" class="btn-link">Xóa</button>
+      </div>
+      <div id="logsContainer" class="logs-list">
+        <div class="log-item dim">Chưa có hoạt động nào.</div>
+      </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast">Đã sao chép mã!</div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

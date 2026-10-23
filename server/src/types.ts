@@ -1,0 +1,174 @@
+import { z } from "@hatch/space-sdk";
+import * as schema from "./schema";
+import { driveImageSchema } from "./services/drive";
+import type { SheetSourceRow } from "./services/settings";
+
+export const productOut = z.object({
+  id: z.number(),
+  stt: z.string(),
+  sku: z.string(),
+  name: z.string(),
+  scale: z.string(),
+  maker: z.string(),
+  size: z.string(),
+  color: z.string(),
+  // Danh sách màu của sản phẩm (phân loại theo Hãng + Mẫu + Tỉ lệ
+  // + Kích thước + Màu sắc — mỗi sản phẩm một màu duy nhất): color
+  // là màu của sản phẩm, colors là danh sách một phần tử chứa màu đó.
+  colors: z.array(z.string()),
+  price: z.string(),
+  stock: z.number(),
+  ship: z.string(),
+  image_url: z.string(),
+  video_url: z.string(),
+  // Ảnh thật từ Drive: chỉ "có ảnh" khi drive_status = "ok"
+  // (đã liệt kê được ≥1 file ảnh thật từ thư mục).
+  drive_folder_id: z.string(),
+  drive_status: z.string(),
+  drive_error: z.string(),
+  drive_checked_at: z.string(),
+  drive_images: z.array(driveImageSchema),
+  has_real_image: z.boolean(),
+  source: z.string(),
+  created_at: z.string(),
+});
+
+export const accountOut = z.object({
+  id: z.number(),
+  platform: z.string(),
+  name: z.string(),
+  handle: z.string(),
+  profile_url: z.string(),
+  linked: z.boolean(),
+  selected: z.boolean(),
+  extension_code: z.string().default(""),
+});
+
+export type AccountRow = typeof schema.accounts.$inferSelect;
+
+// Link mở thẳng tới trang của tài khoản khi người dùng bấm vào nick:
+// - Ưu tiên link trang cá nhân đã lưu (profile_url).
+// - Instagram: suy ra từ username dạng @… ở tên/ghi chú.
+// - Facebook đang đăng nhập (đã liên kết + đang chọn dùng): facebook.com/me
+//   tự chuyển tới đúng trang cá nhân của nick đang đăng nhập trên trình duyệt.
+// Ngoài các trường hợp trên trả "" — giao diện hiện ô nhập link để bổ sung.
+export function deriveProfileUrl(r: AccountRow): string {
+  const stored = r.profileUrl.trim();
+  if (stored) return stored;
+  if (r.platform === "Instagram") {
+    const candidate = [r.name, r.handle].find((v) => v.trim().startsWith("@"));
+    const username = candidate?.trim().slice(1).split(/\s/)[0] ?? "";
+    if (/^[\w.]+$/.test(username))
+      return `https://www.instagram.com/${username}/`;
+    return "";
+  }
+  if (r.linked === 1 && r.selected === 1) return "https://www.facebook.com/me";
+  return "";
+}
+
+export function toAccountOut(r: AccountRow): z.infer<typeof accountOut> {
+  return {
+    id: r.id,
+    platform: r.platform,
+    name: r.name,
+    handle: r.handle,
+    profile_url: deriveProfileUrl(r),
+    linked: r.linked === 1,
+    selected: r.selected === 1,
+    extension_code: (r as any).extensionCode ?? "",
+  };
+}
+
+export const pageOut = z.object({
+  id: z.number(),
+  account_id: z.number(),
+  account_name: z.string(),
+  name: z.string(),
+  url: z.string(),
+  role: z.string(),
+  selected: z.boolean(),
+});
+
+export type PageRow = typeof schema.fbPages.$inferSelect;
+
+export function toPageOut(
+  r: PageRow,
+  accountName: string,
+): z.infer<typeof pageOut> {
+  return {
+    id: r.id,
+    account_id: r.accountId,
+    account_name: accountName,
+    name: r.name,
+    url: r.url,
+    role: r.role,
+    selected: r.selected === 1,
+  };
+}
+
+export const sheetSourceOut = z.object({
+  id: z.number(),
+  name: z.string(),
+  spreadsheet_id: z.string(),
+  sheet_name: z.string(),
+  range: z.string(),
+  title: z.string(),
+  url: z.string(),
+  last_sync_at: z.string(),
+  last_sync_status: z.string(),
+  last_sync_message: z.string(),
+  product_count: z.number(),
+  is_active: z.boolean(),
+});
+
+export function toSheetSourceOut(
+  r: SheetSourceRow,
+  productCount: number,
+  isActive: boolean,
+): z.infer<typeof sheetSourceOut> {
+  return {
+    id: r.id,
+    name: r.name,
+    spreadsheet_id: r.spreadsheetId,
+    sheet_name: r.sheetName,
+    range: r.range,
+    title: r.title,
+    url: `https://docs.google.com/spreadsheets/d/${r.spreadsheetId}/edit`,
+    last_sync_at: r.lastSyncAt,
+    last_sync_status: r.lastSyncStatus,
+    last_sync_message: r.lastSyncMessage,
+    product_count: productCount,
+    is_active: isActive,
+  };
+}
+
+export const sheetConfigOut = z.object({
+  configured: z.boolean(),
+  spreadsheet_id: z.string(),
+  sheet_name: z.string(),
+  range: z.string(),
+  title: z.string(),
+  last_sync_at: z.string(),
+  last_sync_status: z.string(),
+  last_sync_message: z.string(),
+  sheet_product_count: z.number(),
+  active_source_id: z.number(),
+  sources: z.array(sheetSourceOut),
+});
+
+export const runOut = z.object({
+  id: z.number(),
+  query: z.string(),
+  ran_at: z.string(),
+  marketplace_count: z.number(),
+  price_count: z.number(),
+  price_min: z.number().nullable(),
+  price_median: z.number().nullable(),
+  price_max: z.number().nullable(),
+  price_min_fmt: z.string(),
+  price_median_fmt: z.string(),
+  price_max_fmt: z.string(),
+  groups_found: z.number(),
+  notes: z.string(),
+});
+

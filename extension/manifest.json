@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "Social Desk Connector",
+  "version": "1.0.0",
+  "description": "Kết nối trình duyệt Chrome với Social Desk để tự động hóa đăng bài đa tài khoản Facebook",
+  "permissions": [
+    "storage",
+    "tabs",
+    "scripting",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "*://*.facebook.com/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "128": "icons/icon.webp"
+    }
+  },
+  "icons": {
+    "128": "icons/icon.webp"
+  }
+}

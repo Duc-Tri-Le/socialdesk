@@ -1,11 +1,33 @@
 import { QueryClient } from "@tanstack/react-query";
+import { type z } from "zod";
 
 export const spaceQueryClient = new QueryClient();
 
-export type ApiRequest<TClient, TAction extends string> = any;
-export type ApiResponse<TClient, TAction extends string> = any;
+type InferZod<T> = T extends z.ZodType ? z.infer<T> : any;
 
-export function createActionClient<T = any>() {
+export type ActionClient<TActions> = {
+  [K in keyof TActions]: (
+    args?: TActions[K] extends { request?: infer TReq } ? InferZod<TReq> : any,
+  ) => Promise<
+    TActions[K] extends { response?: infer TRes } ? InferZod<TRes> : any
+  >;
+};
+
+export type ApiRequest<TClient, TAction extends keyof TClient | string> =
+  TAction extends keyof TClient
+    ? TClient[TAction] extends (args?: infer TArgs) => any
+      ? TArgs
+      : any
+    : any;
+
+export type ApiResponse<TClient, TAction extends keyof TClient | string> =
+  TAction extends keyof TClient
+    ? TClient[TAction] extends (...args: any[]) => Promise<infer TRes>
+      ? TRes
+      : any
+    : any;
+
+export function createActionClient<TActions = any>(): ActionClient<TActions> {
   return new Proxy(
     {},
     {

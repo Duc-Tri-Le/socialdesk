@@ -63,6 +63,7 @@ export const accounts = sqliteTable("accounts", {
   profileUrl: text("profile_url").notNull().default(""),
   linked: integer("linked").notNull().default(1),
   selected: integer("selected").notNull().default(0),
+  extensionCode: text("extension_code").notNull().default(""),
   createdAt: integer("created_at", { mode: "timestamp_ms" })
     .notNull()
     .$defaultFn(() => new Date()),

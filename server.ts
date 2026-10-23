@@ -12,7 +12,48 @@ if (!fs.existsSync(dbPath)) {
 }
 const sqlite = new Database(dbPath);
 sqlite.exec("PRAGMA journal_mode = WAL;");
+try {
+  sqlite.run("ALTER TABLE accounts ADD COLUMN extension_code TEXT NOT NULL DEFAULT '';");
+} catch {
+  // Cột extension_code đã tồn tại
+}
 const db = drizzle(sqlite, { schema });
+
+// Quản lý kết nối Chrome Extension qua WebSocket
+interface ExtensionWsData {
+  code: string;
+  connectedAt: number;
+}
+const extensionSockets = new Map<string, any>();
+const pendingExtensionTasks = new Map<string, { resolve: (val: any) => void; reject: (err: any) => void; timer: any }>();
+
+// Hàm toàn cục cho actions.ts gọi
+(globalThis as any).__socialDeskGetOnlineExtensionCodes = () => Array.from(extensionSockets.keys());
+(globalThis as any).__socialDeskIsExtensionOnline = (code: string) => !!code && extensionSockets.has(code.trim().toUpperCase());
+(globalThis as any).__socialDeskSendExtensionTask = async (code: string, task: any, timeoutMs = 60000) => {
+  const normCode = (code || "").trim().toUpperCase();
+  const ws = extensionSockets.get(normCode);
+  if (!ws) {
+    throw new Error(`Chrome với mã [${normCode}] chưa kết nối. Vui lòng mở Chrome tương ứng và kiểm tra Extension.`);
+  }
+
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      pendingExtensionTasks.delete(task.taskId);
+      reject(new Error(`Quá thời gian chờ phản hồi từ Chrome [${normCode}] (${Math.round(timeoutMs / 1000)}s)`));
+    }, timeoutMs);
+
+    pendingExtensionTasks.set(task.taskId, { resolve, reject, timer });
+
+    try {
+      ws.send(JSON.stringify(task));
+    } catch (err) {
+      clearTimeout(timer);
+      pendingExtensionTasks.delete(task.taskId);
+      reject(err);
+    }
+  });
+};
 
 // Thư mục lưu trữ media
 const uploadsDir = path.resolve("./uploads");
@@ -307,10 +348,45 @@ const ctx = {
 const clientDistDir = path.resolve("./client/dist");
 const PORT = Number(process.env.PORT) || 3000;
 
-const server = Bun.serve({
+const server = Bun.serve<ExtensionWsData>({
   port: PORT,
-  async fetch(req) {
+  async fetch(req, serverInstance) {
     const url = new URL(req.url);
+
+    // 0. WebSocket Upgrade cho Chrome Extension
+    if (url.pathname === "/ws" || url.pathname === "/ws/extension") {
+      const upgraded = serverInstance.upgrade(req, {
+        data: { code: "", connectedAt: Date.now() },
+      });
+      if (upgraded) return undefined;
+      return new Response("WebSocket upgrade failed", { status: 400 });
+    }
+
+    // API tra cứu danh sách Chrome Extension đang Online
+    if (url.pathname === "/api/extensions") {
+      return new Response(
+        JSON.stringify({
+          onlineCodes: Array.from(extensionSockets.keys()),
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+            "Access-Control-Allow-Origin": "*",
+          },
+        },
+      );
+    }
+
+    // CORS preflight
+    if (req.method === "OPTIONS") {
+      return new Response(null, {
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type",
+        },
+      });
+    }
 
     // 1. Xử lý API Actions (RPC endpoint)
     if (url.pathname === "/actions" || url.pathname === "./actions") {
@@ -372,6 +448,45 @@ const server = Bun.serve({
     return new Response("Social Desk: Client build not found. Please build client first.", {
       status: 404,
     });
+  },
+  websocket: {
+    open(ws) {
+      console.log(`[WebSocket] Một Chrome Extension vừa kết nối.`);
+    },
+    message(ws, message) {
+      try {
+        const text = typeof message === "string" ? message : message.toString();
+        const data = JSON.parse(text);
+
+        if (data.type === "REGISTER_EXTENSION") {
+          const code = (data.code || "").trim().toUpperCase();
+          if (code) {
+            ws.data.code = code;
+            extensionSockets.set(code, ws);
+            console.log(`[WebSocket] ✓ Đã ghi nhận Chrome Extension mã: [${code}]`);
+            ws.send(JSON.stringify({ type: "REGISTER_OK", code }));
+          }
+        } else if (data.type === "PING") {
+          ws.send(JSON.stringify({ type: "PONG" }));
+        } else if (data.type === "TASK_RESULT") {
+          const { taskId } = data;
+          if (taskId && pendingExtensionTasks.has(taskId)) {
+            const p = pendingExtensionTasks.get(taskId)!;
+            clearTimeout(p.timer);
+            pendingExtensionTasks.delete(taskId);
+            p.resolve(data);
+          }
+        }
+      } catch (err) {
+        console.error("[WebSocket] Lỗi xử lý message:", err);
+      }
+    },
+    close(ws) {
+      if (ws.data?.code) {
+        extensionSockets.delete(ws.data.code);
+        console.log(`[WebSocket] Chrome Extension mã [${ws.data.code}] đã ngắt kết nối.`);
+      }
+    },
   },
 });
 
