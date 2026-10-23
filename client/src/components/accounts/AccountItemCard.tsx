@@ -55,11 +55,10 @@ export function AccountItemCard({
 
   return (
     <li
-      className={`rounded-[var(--radius)] border bg-[var(--surface)] p-4 ${
-        a.selected && a.linked
-          ? "border-2 border-[var(--accent)]"
-          : "border-[var(--border)]"
-      }`}
+      className={`rounded-[var(--radius)] border bg-[var(--surface)] p-4 ${a.selected && a.linked
+        ? "border-2 border-[var(--accent)]"
+        : "border-[var(--border)]"
+        }`}
     >
       <div className="flex items-center gap-3">
         <span
@@ -98,11 +97,10 @@ export function AccountItemCard({
           </span>
         ) : (
           <span
-            className={`shrink-0 rounded-full px-2 py-1 text-xs font-semibold ${
-              a.linked
-                ? "bg-[var(--surface-alt)] text-[var(--ok)]"
-                : "bg-[var(--surface-alt)] text-[var(--dim)]"
-            }`}
+            className={`shrink-0 rounded-full px-2 py-1 text-xs font-semibold ${a.linked
+              ? "bg-[var(--surface-alt)] text-[var(--ok)]"
+              : "bg-[var(--surface-alt)] text-[var(--dim)]"
+              }`}
           >
             {a.linked ? "Đã liên kết" : "Chưa liên kết"}
           </span>
@@ -191,11 +189,10 @@ export function AccountItemCard({
           onClick={() => onSelect({ id: a.id, selected: !a.selected })}
           aria-pressed={a.selected}
           disabled={isSelectPending}
-          className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
-            a.selected && a.linked
-              ? "bg-[var(--accent)] text-white"
-              : "border border-[var(--border)] text-[var(--dim)]"
-          }`}
+          className={`rounded-full px-3 py-1.5 text-xs font-semibold ${a.selected && a.linked
+            ? "bg-[var(--accent)] text-white"
+            : "border border-[var(--border)] text-[var(--dim)]"
+            }`}
         >
           {a.selected ? "✓ Đang dùng nick này" : "Dùng nick này để đăng"}
         </button>
