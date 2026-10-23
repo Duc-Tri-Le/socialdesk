@@ -51,19 +51,32 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   // 2. Render logs
+  // 2. Render logs (Chống HTML Injection / XSS an toàn bằng DOM API)
   function renderLogs(logs = []) {
+    logsContainer.textContent = "";
     if (!logs || logs.length === 0) {
-      logsContainer.innerHTML = '<div class="log-item dim">Chưa có hoạt động nào.</div>';
+      const dim = document.createElement("div");
+      dim.className = "log-item dim";
+      dim.textContent = "Chưa có hoạt động nào.";
+      logsContainer.appendChild(dim);
       return;
     }
-    logsContainer.innerHTML = logs
-      .slice(-10)
+    const fragment = document.createDocumentFragment();
+    logs
+      .slice(-15)
       .reverse()
-      .map((item) => {
-        const time = new Date(item.time).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-        return `<div class="log-item ${item.type || ''}">[${time}] ${item.text}</div>`;
-      })
-      .join("");
+      .forEach((item) => {
+        const time = new Date(item.time).toLocaleTimeString("vi-VN", {
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+        });
+        const div = document.createElement("div");
+        div.className = `log-item ${item.type || ""}`;
+        div.textContent = `[${time}] ${item.text || ""}`;
+        fragment.appendChild(div);
+      });
+    logsContainer.appendChild(fragment);
   }
   renderLogs(data.logs);
 

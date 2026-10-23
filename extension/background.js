@@ -1,24 +1,51 @@
-// Social Desk Connector - Background Service Worker
+// Social Desk Connector - Background Service Worker (Manifest V3)
+// Quản lý kết nối WebSocket, điều phối tác vụ đăng bài Facebook đa tài khoản
 
 let socket = null;
 let isConnected = false;
 let reconnectTimer = null;
 let heartbeatTimer = null;
-const logs = [];
+let pongTimeoutTimer = null;
+let reconnectAttempts = 0;
+
+const MIN_RECONNECT_MS = 2000;
+const MAX_RECONNECT_MS = 30000;
+const HEARTBEAT_INTERVAL_MS = 25000;
+const PONG_TIMEOUT_MS = 12000;
+const MAX_LOGS = 50;
+
+// Bộ nhớ đệm chống xử lý trùng lặp Task ID (Idempotency)
+const processedTaskIds = new Set();
+const runningTaskIds = new Set();
+
+function isTaskAlreadyHandled(taskId) {
+  if (!taskId) return false;
+  if (runningTaskIds.has(taskId) || processedTaskIds.has(taskId)) {
+    return true;
+  }
+  return false;
+}
+
+function markTaskProcessed(taskId) {
+  if (!taskId) return;
+  runningTaskIds.delete(taskId);
+  processedTaskIds.add(taskId);
+  if (processedTaskIds.size > 200) {
+    const first = processedTaskIds.values().next().value;
+    processedTaskIds.delete(first);
+  }
+}
 
 async function addLog(text, type = "") {
   const item = { time: Date.now(), text, type };
-  logs.push(item);
-  if (logs.length > 50) logs.shift();
-
   try {
     const data = await chrome.storage.local.get("logs");
     const stored = data.logs || [];
     stored.push(item);
-    if (stored.length > 50) stored.shift();
+    if (stored.length > MAX_LOGS) stored.shift();
     await chrome.storage.local.set({ logs: stored });
   } catch (e) {
-    // Ignore storage errors in background
+    // Không làm gián đoạn luồng nếu storage tạm thời lỗi
   }
 }
 
@@ -41,6 +68,18 @@ async function getWsUrl() {
   return base.replace(/^http:\/\//, "ws://") + "/ws";
 }
 
+function scheduleReconnect() {
+  if (reconnectTimer) clearTimeout(reconnectTimer);
+  const factor = Math.min(reconnectAttempts, 6);
+  const delay = Math.min(MIN_RECONNECT_MS * Math.pow(1.5, factor), MAX_RECONNECT_MS);
+  reconnectAttempts++;
+
+  addLog(`Mất kết nối máy chủ Social Desk — thử lại sau ${Math.round(delay / 1000)}s...`, "error");
+  reconnectTimer = setTimeout(() => {
+    connectWebSocket();
+  }, delay);
+}
+
 async function connectWebSocket() {
   if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
     return;
@@ -48,16 +87,18 @@ async function connectWebSocket() {
 
   if (reconnectTimer) clearTimeout(reconnectTimer);
   if (heartbeatTimer) clearInterval(heartbeatTimer);
+  if (pongTimeoutTimer) clearTimeout(pongTimeoutTimer);
 
   const wsUrl = await getWsUrl();
   const data = await chrome.storage.local.get("extensionCode");
-  const code = (data.extensionCode || "").trim();
+  const code = (data.extensionCode || "").trim().toUpperCase();
 
   try {
     socket = new WebSocket(wsUrl);
 
     socket.onopen = () => {
       isConnected = true;
+      reconnectAttempts = 0;
       updateBadge(true);
       addLog(`Đã kết nối Social Desk tại ${wsUrl}`, "success");
 
@@ -68,163 +109,270 @@ async function connectWebSocket() {
           code: code,
           time: Date.now()
         }));
-        addLog(`Đã đăng ký mã Chrome: [${code}]`, "success");
+        addLog(`Đã đăng ký mã nhận diện: [${code}]`, "success");
       }
 
-      // Giữ heartbeat
+      // Khởi động chu kỳ Heartbeat PING/PONG kiểm tra kết nối sống
       heartbeatTimer = setInterval(() => {
         if (socket && socket.readyState === WebSocket.OPEN) {
-          socket.send(JSON.stringify({ type: "PING" }));
+          try {
+            socket.send(JSON.stringify({ type: "PING", time: Date.now() }));
+            // Đặt hẹn giờ kiểm tra PONG phản hồi
+            if (pongTimeoutTimer) clearTimeout(pongTimeoutTimer);
+            pongTimeoutTimer = setTimeout(() => {
+              console.warn("[Social Desk] Không nhận được PONG từ server, ngắt kết nối để thử lại...");
+              if (socket) {
+                try { socket.close(); } catch (e) {}
+              }
+            }, PONG_TIMEOUT_MS);
+          } catch (e) {
+            console.error("[Social Desk] Lỗi gửi PING:", e);
+          }
         }
-      }, 25000);
+      }, HEARTBEAT_INTERVAL_MS);
     };
 
     socket.onmessage = async (event) => {
       try {
         const msg = JSON.parse(event.data);
-        if (msg.type === "PONG") return;
+
+        if (msg.type === "PONG") {
+          if (pongTimeoutTimer) clearTimeout(pongTimeoutTimer);
+          return;
+        }
 
         if (msg.type === "REGISTER_OK") {
-          addLog(`Máy chủ xác nhận mã [${msg.code}] hợp lệ`, "success");
+          addLog(`Máy chủ đã sẵn sàng cho mã [${msg.code}]`, "success");
           return;
         }
 
         if (msg.action === "PUBLISH_POST") {
-          addLog(`Nhận lệnh đăng bài: "${msg.title || msg.targetName || 'Bài đăng'}"`, "info");
           handlePublishTask(msg);
         }
       } catch (e) {
-        console.error("Lỗi đọc thông điệp WebSocket:", e);
+        console.error("[Social Desk] Lỗi phân tích gói tin WebSocket:", e);
       }
     };
 
     socket.onclose = () => {
       isConnected = false;
       updateBadge(false);
-      addLog("Mất kết nối máy chủ Social Desk — sẽ thử kết nối lại sau 3s...", "error");
-      reconnectTimer = setTimeout(connectWebSocket, 3000);
+      if (heartbeatTimer) clearInterval(heartbeatTimer);
+      if (pongTimeoutTimer) clearTimeout(pongTimeoutTimer);
+      scheduleReconnect();
     };
 
-    socket.onerror = (err) => {
+    socket.onerror = () => {
       isConnected = false;
       updateBadge(false);
+      try { socket.close(); } catch (e) {}
     };
   } catch (err) {
     isConnected = false;
     updateBadge(false);
-    reconnectTimer = setTimeout(connectWebSocket, 3000);
+    scheduleReconnect();
   }
 }
 
-// Xử lý tác vụ đăng bài Facebook
-async function handlePublishTask(task) {
-  const { taskId, draftId, targetUrl, caption, images = [], targetName } = task;
-
-  try {
-    addLog(`Đang mở trang Facebook: ${targetUrl || 'Facebook'}...`, "");
-
-    // 1. Mở tab Facebook hoặc chuyển đến URL đích
-    const tab = await chrome.tabs.create({
-      url: targetUrl || "https://www.facebook.com/",
-      active: true,
+// Đảm bảo Content Script đã sẵn sàng trong Tab trước khi gửi lệnh
+async function ensureContentScriptReady(tabId, maxRetries = 4) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    const isAlive = await new Promise((resolve) => {
+      chrome.tabs.sendMessage(tabId, { action: "PING" }, (res) => {
+        if (chrome.runtime.lastError || !res || !res.pong) {
+          resolve(false);
+        } else {
+          resolve(true);
+        }
+      });
     });
 
-    // 2. Chờ tab hoàn tất tải trang
-    await waitForTabComplete(tab.id);
-    addLog("Trang đã tải xong, đang chuẩn bị điền nội dung...", "");
+    if (isAlive) return true;
 
-    // Đợi thêm 3.5s để React / Lexical editor của Facebook ổn định
-    await new Promise((r) => setTimeout(r, 3500));
-
-    // 3. Inject content script nếu cần
+    // Nếu chưa phản hồi, chủ động nạp content.js vào tab
     try {
       await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
+        target: { tabId },
         files: ["content.js"],
       });
     } catch (e) {
-      // Content script có thể đã được nạp tự động qua manifest
+      console.warn(`[Social Desk] Lần ${attempt} nạp script:`, e.message);
     }
 
-    // 4. Gửi lệnh thực thi tới Content Script trên tab đó
-    const response = await new Promise((resolve) => {
+    await new Promise((r) => setTimeout(r, 600));
+  }
+
+  return false;
+}
+
+// Xử lý tác vụ đăng bài Facebook an toàn
+async function handlePublishTask(task) {
+  const { taskId, draftId, targetUrl, caption, images = [], targetName } = task;
+
+  // 1. Kiểm tra chống trùng lặp Task ID (Idempotency)
+  if (isTaskAlreadyHandled(taskId)) {
+    console.warn(`[Social Desk] Bỏ qua taskId trùng lặp: ${taskId}`);
+    addLog(`Bỏ qua yêu cầu đăng trùng lặp cho tác vụ #${taskId}`, "info");
+    return;
+  }
+  runningTaskIds.add(taskId);
+
+  // 2. Xác thực URL đích an toàn (phải thuộc tên miền facebook.com)
+  const safeTargetUrl = (targetUrl || "https://www.facebook.com/").trim();
+  try {
+    const parsed = new URL(safeTargetUrl);
+    if (!parsed.hostname.endsWith("facebook.com")) {
+      throw new Error(`Tên miền không hợp lệ: ${parsed.hostname}. Chỉ chấp nhận facebook.com.`);
+    }
+  } catch (urlErr) {
+    markTaskProcessed(taskId);
+    addLog(`Từ chối URL không an toàn: ${urlErr.message}`, "error");
+    sendTaskResult({
+      taskId,
+      draftId,
+      status: "failed",
+      postUrl: "",
+      message: `Bảo mật: ${urlErr.message}`,
+    });
+    return;
+  }
+
+  addLog(`Bắt đầu xử lý đăng bài: "${targetName || 'Facebook'}"...`, "info");
+
+  let createdTabId = null;
+
+  try {
+    // 3. Mở tab Facebook đích
+    const tab = await chrome.tabs.create({
+      url: safeTargetUrl,
+      active: true,
+    });
+    createdTabId = tab.id;
+
+    // 4. Chờ tab hoàn tất tải DOM
+    await waitForTabComplete(tab.id, 30000);
+    addLog("Trang Facebook đã tải xong, đang kiểm tra giao diện...", "");
+
+    // Đợi 2.5s để React / Lexical editor khởi tạo
+    await new Promise((r) => setTimeout(r, 2500));
+
+    // 5. Kiểm tra & Bắt tay với Content Script
+    const scriptReady = await ensureContentScriptReady(tab.id);
+    if (!scriptReady) {
+      throw new Error("Không thể kết nối với script điều khiển trên trang Facebook. Vui lòng kiểm tra quyền truy cập tab.");
+    }
+
+    // 6. Gửi lệnh đăng bài kèm thời gian chờ tối đa (90s)
+    const postPromise = new Promise((resolve, reject) => {
       chrome.tabs.sendMessage(
         tab.id,
-        { action: "DO_POST", payload: { caption, images, targetUrl } },
+        {
+          action: "DO_POST",
+          payload: { caption, images, targetUrl: safeTargetUrl, taskId },
+        },
         (res) => {
           if (chrome.runtime.lastError) {
-            resolve({
-              success: false,
-              message: chrome.runtime.lastError.message || "Không thể kết nối với trang Facebook.",
-            });
+            reject(new Error(chrome.runtime.lastError.message || "Mất liên lạc với trang Facebook"));
           } else {
-            resolve(res || { success: false, message: "Không nhận được phản hồi từ trang Facebook." });
+            resolve(res || { success: false, message: "Không nhận được phản hồi kết quả từ Facebook" });
           }
         }
       );
     });
 
-    // 5. Báo cáo kết quả về lại cho Social Desk Server
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error("Quá thời gian xử lý đăng bài (90 giây).")), 90000);
+    });
+
+    const response = await Promise.race([postPromise, timeoutPromise]);
+
+    markTaskProcessed(taskId);
+
+    // 7. Báo cáo kết quả chi tiết về máy chủ
     if (response.success) {
-      addLog(`✓ Đăng bài thành công lên "${targetName || 'Facebook'}"`, "success");
+      const extraMsg = response.pendingApproval ? " (Đang chờ Quản trị viên duyệt)" : "";
+      addLog(`✓ Đăng bài thành công lên "${targetName || 'Facebook'}"${extraMsg}`, "success");
     } else {
       addLog(`✗ Đăng bài thất bại: ${response.message}`, "error");
     }
 
-    if (socket && socket.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify({
-        type: "TASK_RESULT",
-        taskId,
-        draftId,
-        status: response.success ? "published" : "failed",
-        postUrl: response.postUrl || "",
-        message: response.message || "",
-      }));
-    }
+    sendTaskResult({
+      taskId,
+      draftId,
+      status: response.success ? "published" : "failed",
+      postUrl: response.postUrl || safeTargetUrl,
+      message: response.message || (response.success ? "Đã đăng bài thành công" : "Lỗi không xác định"),
+      pendingApproval: !!response.pendingApproval,
+    });
+
   } catch (err) {
-    addLog(`Lỗi xử lý tác vụ: ${err.message}`, "error");
-    if (socket && socket.readyState === WebSocket.OPEN) {
+    markTaskProcessed(taskId);
+    addLog(`Lỗi xử lý tác vụ #${taskId}: ${err.message}`, "error");
+    sendTaskResult({
+      taskId,
+      draftId,
+      status: "failed",
+      postUrl: "",
+      message: `Lỗi Extension Chrome: ${err.message}`,
+    });
+  }
+}
+
+function sendTaskResult(data) {
+  if (socket && socket.readyState === WebSocket.OPEN) {
+    try {
       socket.send(JSON.stringify({
         type: "TASK_RESULT",
-        taskId,
-        draftId,
-        status: "failed",
-        postUrl: "",
-        message: `Lỗi Extension Chrome: ${err.message}`,
+        ...data,
       }));
+    } catch (e) {
+      console.error("[Social Desk] Không thể gửi TASK_RESULT về server:", e);
     }
   }
 }
 
-function waitForTabComplete(tabId) {
+function waitForTabComplete(tabId, timeoutMs = 25000) {
   return new Promise((resolve) => {
+    let resolved = false;
     function listener(id, info) {
       if (id === tabId && info.status === "complete") {
-        chrome.tabs.onUpdated.removeListener(listener);
+        cleanup();
         resolve();
       }
     }
-    chrome.tabs.onUpdated.addListener(listener);
 
-    // Timeout an toàn sau 25s
-    setTimeout(() => {
-      chrome.tabs.onUpdated.removeListener(listener);
+    const timer = setTimeout(() => {
+      cleanup();
       resolve();
-    }, 25000);
+    }, timeoutMs);
+
+    function cleanup() {
+      if (resolved) return;
+      resolved = true;
+      clearTimeout(timer);
+      chrome.tabs.onUpdated.removeListener(listener);
+    }
+
+    chrome.tabs.onUpdated.addListener(listener);
   });
 }
 
-// Lắng nghe message từ Popup
+// Lắng nghe message từ Popup Extension
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "GET_STATUS") {
-    sendResponse({
-      connected: isConnected,
-      logs: logs,
+    chrome.storage.local.get("logs").then((data) => {
+      sendResponse({
+        connected: isConnected,
+        logs: data.logs || [],
+      });
+    }).catch(() => {
+      sendResponse({ connected: isConnected, logs: [] });
     });
     return true;
   }
 
   if (request.action === "RECONNECT") {
+    reconnectAttempts = 0;
     if (socket) {
       try { socket.close(); } catch (e) {}
     }
@@ -234,5 +382,5 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 });
 
-// Khởi chạy kết nối khi extension được load
+// Khởi chạy kết nối ngay khi Extension được load
 connectWebSocket();
