@@ -1,7 +1,7 @@
 import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import * as schema from "./server/src/schema";
-import { Actions } from "./server/dist/actions.js";
+import { Actions } from "./server/src/actions";
 import path from "node:path";
 import fs from "node:fs";
 
@@ -475,16 +475,26 @@ const server = Bun.serve<ExtensionWsData>({
               const rows = sqlite.query("SELECT * FROM accounts WHERE extension_code = ?").all(code) as any[];
               if (rows.length === 0) {
                 const autoName = fbName || `Nick Facebook ${code}`;
+                const initialUrl = fbUrl && !/^https?:\/\/(www\.)?facebook\.com\/?$/i.test(fbUrl) ? fbUrl : "";
                 sqlite.run(
                   "INSERT INTO accounts (platform, name, handle, profile_url, extension_code, linked, selected, created_at) VALUES (?, ?, ?, ?, ?, 1, 1, ?)",
-                  ["Facebook", autoName, "Tài khoản Chrome Extension", fbUrl, code, Date.now()]
+                  ["Facebook", autoName, "Tài khoản Chrome Extension", initialUrl, code, Date.now()]
                 );
                 console.log(`[WebSocket] ✓ Tự động tạo tài khoản Facebook: "${autoName}" từ Chrome [${code}]`);
               } else if (fbName && rows[0].name !== fbName) {
-                sqlite.run(
-                  "UPDATE accounts SET name = ?, profile_url = COALESCE(NULLIF(?, ''), profile_url) WHERE id = ?",
-                  [fbName, fbUrl, rows[0].id]
-                );
+                const hasCustomUrl = rows[0].profile_url && !/^https?:\/\/(www\.)?facebook\.com\/?$/i.test(rows[0].profile_url);
+                const isValidFbUrl = fbUrl && !/^https?:\/\/(www\.)?facebook\.com\/?$/i.test(fbUrl);
+                if (!hasCustomUrl && isValidFbUrl) {
+                  sqlite.run(
+                    "UPDATE accounts SET name = ?, profile_url = ? WHERE id = ?",
+                    [fbName, fbUrl, rows[0].id]
+                  );
+                } else {
+                  sqlite.run(
+                    "UPDATE accounts SET name = ? WHERE id = ?",
+                    [fbName, rows[0].id]
+                  );
+                }
                 console.log(`[WebSocket] ✓ Cập nhật tên nick Facebook thành "${fbName}" cho mã [${code}]`);
               }
             } catch (dbErr) {

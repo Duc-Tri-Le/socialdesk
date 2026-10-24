@@ -7,6 +7,7 @@ import {
   toAccountOut,
   pageOut,
   toPageOut,
+  extractFacebookPageName,
 } from "../types";
 
 export const accountActions = {
@@ -334,9 +335,9 @@ export const accountActions = {
   addPage: defineAction({
     request: z.object({
       account_id: z.number().int().positive(),
-      name: z.string().min(1),
       url: z.string().default(""),
-      role: z.string().default(""),
+      name: z.string().default("").optional(),
+      role: z.string().default("").optional(),
     }),
     response: z.object({ ok: z.boolean(), message: z.string() }),
     async handler(ctx, args) {
@@ -352,24 +353,40 @@ export const accountActions = {
           ok: false,
           message: "Page chỉ thuộc về tài khoản Facebook, không phải Instagram.",
         };
-      const url = args.url.trim();
-      if (url && !/^https:\/\/(www\.)?facebook\.com\//.test(url))
+      let cleanUrl = (args.url || "").trim();
+      if (!cleanUrl) {
+        return {
+          ok: false,
+          message: "Vui lòng nhập link Fanpage Facebook.",
+        };
+      }
+      if (!/^https?:\/\//i.test(cleanUrl)) {
+        cleanUrl = `https://${cleanUrl}`;
+      }
+      if (
+        !/^https?:\/\/((www|m|web)\.)?(facebook\.com|fb\.com)\/.+/i.test(cleanUrl)
+      ) {
         return {
           ok: false,
           message:
-            "Link Page chưa đúng — dán link bắt đầu bằng https://www.facebook.com/…",
+            "Link Page chưa đúng — vui lòng dán link Facebook hợp lệ (ví dụ https://www.facebook.com/ten-trang).",
         };
+      }
+
+      const finalName = args.name?.trim() || extractFacebookPageName(cleanUrl);
+      const finalRole = args.role?.trim() || "";
+
       await db.insert(schema.fbPages).values({
         accountId: acc.id,
-        name: args.name.trim(),
-        url,
-        role: args.role.trim(),
+        name: finalName,
+        url: cleanUrl,
+        role: finalRole,
         selected: 1,
       });
       ctx.invalidateQueries();
       return {
         ok: true,
-        message: `Đã thêm Page “${args.name.trim()}” vào nick ${acc.name} và đang chọn để đăng.`,
+        message: `Đã thêm Fanpage “${finalName}” vào nick ${acc.name} và đang chọn để đăng.`,
       };
     },
   }),
@@ -411,6 +428,76 @@ export const accountActions = {
         .where(eq(schema.fbPages.id, args.id));
       ctx.invalidateQueries();
       return { ok: true };
+    },
+  }),
+
+  setPageUrl: defineAction({
+    request: z.object({
+      id: z.number().int().positive(),
+      url: z.string().default(""),
+    }),
+    response: z.object({ ok: z.boolean(), message: z.string() }),
+    async handler(ctx, args) {
+      const db = ctx.db<typeof schema>();
+      const [row] = await db
+        .select()
+        .from(schema.fbPages)
+        .where(eq(schema.fbPages.id, args.id));
+      if (!row) return { ok: false, message: "Không tìm thấy Fanpage." };
+
+      let cleanUrl = args.url.trim();
+      if (cleanUrl && !/^https?:\/\//i.test(cleanUrl)) {
+        cleanUrl = `https://${cleanUrl}`;
+      }
+      if (
+        cleanUrl &&
+        !/^https?:\/\/((www|m|web)\.)?(facebook\.com|fb\.com)\/.+/i.test(cleanUrl)
+      ) {
+        return {
+          ok: false,
+          message:
+            "Link Fanpage chưa đúng — vui lòng dán link Facebook hợp lệ (ví dụ: https://www.facebook.com/ten-trang).",
+        };
+      }
+
+      await db
+        .update(schema.fbPages)
+        .set({ url: cleanUrl })
+        .where(eq(schema.fbPages.id, args.id));
+      ctx.invalidateQueries();
+      return {
+        ok: true,
+        message: cleanUrl
+          ? `Đã cập nhật link Fanpage “${row.name}”.`
+          : `Đã xóa link Fanpage “${row.name}”.`,
+      };
+    },
+  }),
+
+  setPageName: defineAction({
+    request: z.object({
+      id: z.number().int().positive(),
+      name: z.string().min(1),
+    }),
+    response: z.object({ ok: z.boolean(), message: z.string() }),
+    async handler(ctx, args) {
+      const db = ctx.db<typeof schema>();
+      const [row] = await db
+        .select()
+        .from(schema.fbPages)
+        .where(eq(schema.fbPages.id, args.id));
+      if (!row) return { ok: false, message: "Không tìm thấy Fanpage." };
+
+      const name = args.name.trim();
+      await db
+        .update(schema.fbPages)
+        .set({ name })
+        .where(eq(schema.fbPages.id, args.id));
+      ctx.invalidateQueries();
+      return {
+        ok: true,
+        message: `Đã đổi tên Fanpage thành “${name}”.`,
+      };
     },
   }),
 

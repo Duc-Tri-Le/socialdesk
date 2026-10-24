@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api";
 import type { Account, Page } from "../../types";
 import { btnPrimary, inputCls } from "../../utils/styles";
-import { ConfirmModal } from "../ui";
+import { ConfirmModal, FacebookIcon } from "../ui";
 
 export interface AccountPagesProps {
   account: Account;
@@ -38,8 +38,10 @@ export function AccountPages({
   };
 
   const showList = isExpanded !== undefined ? isExpanded : true;
-  const [form, setForm] = useState({ name: "", url: "", role: "" });
+  const [pageUrl, setPageUrl] = useState("");
   const [pageToDelete, setPageToDelete] = useState<Page | null>(null);
+  const [editingPageId, setEditingPageId] = useState<number | null>(null);
+  const [editUrlDraft, setEditUrlDraft] = useState("");
 
   const extCode = (account.extension_code || "").trim().toUpperCase();
   const isParentChromeOnline = extCode ? onlineCodes.includes(extCode) : false;
@@ -54,14 +56,14 @@ export function AccountPages({
     mutationFn: () =>
       api.addPage({
         account_id: account.id,
-        name: form.name,
-        url: form.url,
-        role: form.role,
+        url: pageUrl.trim(),
+        name: "",
+        role: "",
       }),
     onSuccess: (res) => {
       onMsg(res.message);
       if (res.ok) {
-        setForm({ name: "", url: "", role: "" });
+        setPageUrl("");
         setIsFormOpen(false);
       }
       refresh();
@@ -73,6 +75,18 @@ export function AccountPages({
       api.setPageSelected(args),
     onSuccess: (res) => {
       onMsg(res.message);
+      refresh();
+    },
+  });
+
+  const saveUrl = useMutation({
+    mutationFn: (args: { id: number; url: string }) =>
+      api.setPageUrl(args),
+    onSuccess: (res) => {
+      onMsg(res.message);
+      if (res.ok) {
+        setEditingPageId(null);
+      }
       refresh();
     },
   });
@@ -106,142 +120,230 @@ export function AccountPages({
             aria-expanded={isFormOpen}
             className="text-xs font-semibold text-[var(--accent-ink)] hover:underline"
           >
-            {isFormOpen ? "Đóng form" : "+ Thêm Fanpage"}
+            {isFormOpen ? "Đóng form" : "Thêm Fanpage"}
           </button>
         </div>
       )}
 
       {showList && pages.length > 0 && (
-        <ul className="mt-2 space-y-1.5">
+        <ul className="mt-2.5 space-y-2">
           {pages.map((p) => (
             <li
               key={p.id}
-              className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-md border border-[var(--border)] bg-[var(--surface-alt)] p-2.5 text-xs transition-colors hover:border-[var(--text)]/40"
+              className={`rounded-lg border transition-all duration-200 p-2.5 sm:p-3 ${
+                p.selected
+                  ? "border-amber-400/80 shadow-[0_0_12px_rgba(251,191,36,0.12)] bg-gradient-to-b from-amber-500/[0.03] to-[var(--surface)] ring-1 ring-amber-400/30"
+                  : "border-[var(--border)] bg-[var(--surface)] hover:border-zinc-700/80 hover:shadow-sm"
+              }`}
             >
-              {/* Thông tin Fanpage & Trạng thái kết nối */}
-              <div className="min-w-0 flex-1 space-y-1">
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="rounded bg-indigo-500/15 px-1.5 py-0.5 text-[10px] font-bold text-indigo-400">
-                    Fanpage
-                  </span>
-                  <a
-                    href={p.url || `https://facebook.com`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="truncate font-bold text-[var(--accent-ink)] hover:underline"
-                    title={`Mở trang ${p.name}`}
+              {/* 1. HEADER CARD (ICON, TÊN FANPAGE, CHECKBOX CHỌN) */}
+              <div className="flex items-start justify-between gap-2.5">
+                <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                  {/* Avatar 32x32 với chấm trạng thái */}
+                  <span
+                    aria-hidden="true"
+                    className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-bold shadow-sm bg-blue-600/15 text-blue-500 border border-blue-500/20"
                   >
-                    {p.name} ↗
-                  </a>
-                  {p.role && (
-                    <span className="text-[11px] text-[var(--dim)]">({p.role})</span>
-                  )}
+                    <FacebookIcon className="h-4 w-4" />
+                    <span
+                      className={`absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full ring-2 ring-[var(--surface)] ${
+                        isParentChromeOnline ? "bg-emerald-400" : "bg-zinc-500"
+                      }`}
+                      title={isParentChromeOnline ? "Extension: Đã kết nối" : "Extension: Chưa mở Chrome"}
+                    />
+                  </span>
+
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5 leading-tight pt-1">
+                      <span
+                        title={p.name}
+                        className="text-sm font-bold text-[var(--text)] truncate max-w-[170px] sm:max-w-[240px]"
+                      >
+                        {p.name || "Fanpage Facebook"}
+                      </span>
+                    </div>
+                  </div>
                 </div>
 
-                {/* Trạng thái kết nối của từng Fanpage (P0/P1) */}
-                <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
-                  <span className="text-[var(--dim)]">Nick quản trị: <strong className="text-[var(--text)]">{account.name}</strong></span>
-                  <span className="text-[var(--dim)]">·</span>
-                  {!account.linked ? (
-                    <span className="inline-flex items-center gap-1 rounded bg-amber-500/10 px-1.5 py-0.2 text-[10px] font-medium text-amber-400">
-                      ⚠️ Nick mẹ chưa liên kết
+                {/* Checkbox chọn Fanpage (như tài khoản Insta) */}
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <label
+                    className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs cursor-pointer select-none transition-colors border ${
+                      p.selected
+                        ? "border-amber-400/40 bg-amber-400/10 text-amber-300 font-bold"
+                        : "border-[var(--border)] bg-[var(--surface-alt)] text-[var(--dim)] hover:text-[var(--text)] hover:border-zinc-600"
+                    }`}
+                    title={p.selected ? "Đang chọn Fanpage này để đăng (Click để bỏ chọn)" : "Chọn Fanpage này để đăng"}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={p.selected}
+                      onChange={() =>
+                        toggle.mutate({ id: p.id, selected: !p.selected })
+                      }
+                      disabled={toggle.isPending}
+                      className="h-3.5 w-3.5 rounded border-zinc-600 bg-zinc-800 text-amber-400 focus:ring-1 focus:ring-amber-400/50 cursor-pointer accent-amber-400"
+                    />
+                    <span className="text-[11px] font-semibold whitespace-nowrap">
+                      {p.selected ? "Đang chọn" : "Chọn"}
                     </span>
-                  ) : isParentChromeOnline ? (
-                    <span className="inline-flex items-center gap-1 rounded bg-emerald-500/15 px-1.5 py-0.2 text-[10px] font-semibold text-emerald-400">
+                  </label>
+                </div>
+              </div>
+
+              {/* 2. KHỐI CHROME EXTENSION (NHƯ TÀI KHOẢN INSTA) */}
+              <div className="mt-2.5 flex flex-wrap items-center justify-between gap-1.5 rounded-md border border-[var(--border)]/70 bg-[var(--surface-alt)]/50 px-2.5 py-1 text-xs">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className="text-[11px] font-medium text-[var(--dim)]">Extension:</span>
+                  {isParentChromeOnline ? (
+                    <span className="inline-flex items-center gap-1 font-semibold text-emerald-400 text-[11px]">
                       <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                      Sẵn sàng đăng qua Chrome ({extCode})
+                      Đã kết nối ({extCode})
                     </span>
                   ) : extCode ? (
-                    <span className="inline-flex items-center gap-1 rounded bg-[var(--surface)] px-1.5 py-0.2 text-[10px] font-medium text-[var(--dim)] border border-[var(--border)]">
-                      <span className="h-1.5 w-1.5 rounded-full bg-[var(--dim)]" />
-                      Chờ mở Chrome ({extCode})
+                    <span className="inline-flex items-center gap-1 font-medium text-[var(--dim)] text-[11px]">
+                      <span className="h-1.5 w-1.5 rounded-full bg-zinc-500" />
+                      Chưa mở Chrome ({extCode})
                     </span>
                   ) : (
-                    <span className="inline-flex items-center gap-1 rounded bg-amber-500/10 px-1.5 py-0.2 text-[10px] font-medium text-amber-400">
-                      ⚠️ Nick mẹ chưa gán mã Chrome
+                    <span className="inline-flex items-center gap-1 font-medium text-amber-400 text-[11px]">
+                      Chưa gán Profile
                     </span>
                   )}
                 </div>
               </div>
 
-              {/* Các nút hành động cho từng Fanpage */}
-              <div className="flex shrink-0 items-center gap-1.5 self-end sm:self-center">
-                <button
-                  type="button"
-                  onClick={() =>
-                    toggle.mutate({ id: p.id, selected: !p.selected })
-                  }
-                  aria-pressed={p.selected}
-                  disabled={toggle.isPending}
-                  className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition-all ${
-                    p.selected
-                      ? "bg-[var(--accent)] text-white shadow-sm"
-                      : "border border-[var(--border)] bg-[var(--surface)] text-[var(--dim)] hover:border-[var(--text)]"
-                  }`}
-                >
-                  {p.selected ? "✓ Đang chọn đăng" : "Chọn đăng"}
-                </button>
+              {/* 3. HÀNG THAO TÁC (MỞ TRANG & XÓA) */}
+              <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-[var(--border)] pt-2 text-xs">
+                <div className="flex items-center gap-2">
+                  {p.url ? (
+                    <a
+                      href={p.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      aria-label={`Mở trang ${p.name}`}
+                      className="inline-flex items-center gap-1 font-semibold text-[var(--accent-ink)] hover:underline"
+                    >
+                      <span>Mở trang</span>
+                    </a>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingPageId(p.id);
+                        setEditUrlDraft("");
+                      }}
+                      className="text-[11px] text-[var(--dim)] hover:text-[var(--text)] underline"
+                    >
+                      + Gán link
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (editingPageId === p.id) {
+                        setEditingPageId(null);
+                      } else {
+                        setEditingPageId(p.id);
+                        setEditUrlDraft(p.url || "");
+                      }
+                    }}
+                    className="text-[11px] text-[var(--dim)] hover:text-[var(--text)] underline"
+                    title="Chỉnh sửa link Fanpage"
+                  >
+                    {editingPageId === p.id ? "Đóng sửa" : "Sửa link"}
+                  </button>
+                </div>
+
                 <button
                   type="button"
                   onClick={() => setPageToDelete(p)}
-                  aria-label={`Xóa fanpage ${p.name}`}
-                  className="rounded-full px-2 py-1 text-[11px] font-medium text-[var(--danger)] hover:bg-red-500/10 transition-colors"
+                  className="text-[11px] font-medium text-[var(--danger)] hover:underline hover:bg-red-500/10 px-1.5 py-0.5 rounded transition-colors"
                 >
                   Xóa
                 </button>
               </div>
+
+              {/* Ô sửa link inline cho Fanpage */}
+              {editingPageId === p.id && (
+                <div className="mt-2 flex flex-wrap items-center gap-1.5 rounded bg-[var(--surface-alt)] p-2">
+                  <input
+                    aria-label={`Link Fanpage ${p.name}`}
+                    className={`${inputCls} min-w-0 flex-1 text-xs py-1`}
+                    value={editUrlDraft}
+                    onChange={(e) => setEditUrlDraft(e.target.value)}
+                    placeholder="https://www.facebook.com/..."
+                  />
+                  <button
+                    type="button"
+                    className={`${btnPrimary} py-1 text-xs`}
+                    disabled={saveUrl.isPending}
+                    onClick={() => {
+                      saveUrl.mutate({ id: p.id, url: editUrlDraft.trim() });
+                    }}
+                  >
+                    {saveUrl.isPending ? "Đang lưu…" : "Lưu"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditingPageId(null)}
+                    className="text-xs text-[var(--dim)] hover:text-[var(--text)] px-2"
+                  >
+                    Hủy
+                  </button>
+                </div>
+              )}
             </li>
           ))}
         </ul>
       )}
 
-      {/* Form thêm Fanpage */}
+      {/* Form thêm Fanpage (Chỉ cần dán link URL) */}
       {isFormOpen && (
         <form
           onSubmit={(e) => {
             e.preventDefault();
+            if (!pageUrl.trim()) return;
             add.mutate();
           }}
-          className="mt-3 space-y-2.5 rounded border border-[var(--border)] bg-[var(--surface-alt)] p-3 animate-in fade-in duration-100"
+          className="mt-3 space-y-2.5 rounded-lg border border-[var(--border)] bg-[var(--surface-alt)] p-3 animate-in fade-in duration-100"
         >
-          <p className="text-xs font-semibold">
-            Thêm Fanpage do nick <strong className="text-[var(--accent-ink)]">{account.name}</strong> quản trị:
-          </p>
-          <input
-            required
-            placeholder="Tên Fanpage (Ví dụ: ĐỨC GARAGE, Shop Mô Hình...)"
-            value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
-            className={inputCls}
-          />
-          <input
-            required
-            placeholder="Link Fanpage (https://facebook.com/…)"
-            value={form.url}
-            onChange={(e) => setForm({ ...form, url: e.target.value })}
-            className={inputCls}
-          />
-          <input
-            placeholder="Vai trò của nick này trên Page (Quản trị viên / Biên tập viên…)"
-            value={form.role}
-            onChange={(e) => setForm({ ...form, role: e.target.value })}
-            className={inputCls}
-          />
-          <div className="flex gap-2 pt-1">
-            <button
-              type="submit"
-              disabled={add.isPending}
-              className={btnPrimary}
-            >
-              {add.isPending ? "Đang lưu…" : "Lưu Fanpage"}
-            </button>
-            <button
-              type="button"
-              onClick={() => setIsFormOpen(false)}
-              className="rounded-full border border-[var(--border)] px-3 py-1 text-xs text-[var(--dim)] hover:text-[var(--text)]"
-            >
-              Hủy
-            </button>
+          <div className="flex flex-wrap items-center justify-between gap-1 text-xs">
+            <p className="font-semibold text-[var(--text)]">
+              Thêm Fanpage do nick <strong className="text-[var(--accent-ink)]">{account.name}</strong> quản trị:
+            </p>
+            <span className="text-[11px] text-[var(--dim)]">Tên Fanpage tự nhận diện qua link</span>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <input
+              required
+              autoFocus
+              type="text"
+              placeholder="Dán link Fanpage (ví dụ https://www.facebook.com/ducgarage)"
+              value={pageUrl}
+              onChange={(e) => setPageUrl(e.target.value)}
+              className={`${inputCls} flex-1`}
+            />
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                type="submit"
+                disabled={add.isPending || !pageUrl.trim()}
+                className={btnPrimary}
+              >
+                {add.isPending ? "Đang lưu…" : "Lưu Fanpage"}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsFormOpen(false);
+                  setPageUrl("");
+                }}
+                className="rounded-full border border-[var(--border)] px-3 py-1.5 text-xs text-[var(--dim)] hover:text-[var(--text)] transition-colors"
+              >
+                Hủy
+              </button>
+            </div>
           </div>
         </form>
       )}

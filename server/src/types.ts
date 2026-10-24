@@ -49,15 +49,90 @@ export const accountOut = z.object({
 
 export type AccountRow = typeof schema.accounts.$inferSelect;
 
+export function capitalizeWords(str: string): string {
+  return str
+    .split(/\s+/)
+    .map((word) => (word ? word.charAt(0).toUpperCase() + word.slice(1) : ""))
+    .join(" ")
+    .trim();
+}
+
+/**
+ * Trích xuất tên Fanpage thân thiện từ URL Facebook khi người dùng không nhập tên.
+ * Hỗ trợ các định dạng:
+ * - https://facebook.com/ducgarage -> "Ducgarage"
+ * - https://facebook.com/duc.garage -> "Duc Garage"
+ * - https://facebook.com/p/Duc-Garage-Auto-61550000000000/ -> "Duc Garage Auto"
+ * - https://facebook.com/pages/Shop-Xe-Mo-Hinh/102938481239 -> "Shop Xe Mo Hinh"
+ * - https://facebook.com/profile.php?id=61550000000000 -> "Fanpage 61550000000000"
+ */
+export function extractFacebookPageName(urlStr: string): string {
+  try {
+    let clean = urlStr.trim();
+    if (!/^https?:\/\//i.test(clean)) {
+      clean = `https://${clean}`;
+    }
+    const parsed = new URL(clean);
+    const idParam = parsed.searchParams.get("id");
+
+    const segments = parsed.pathname
+      .split("/")
+      .map((s) => {
+        try {
+          return decodeURIComponent(s).trim();
+        } catch {
+          return s.trim();
+        }
+      })
+      .filter(
+        (s) =>
+          s &&
+          !["pages", "category", "p", "profile.php", "business"].includes(
+            s.toLowerCase()
+          )
+      );
+
+    const firstSegment = segments[0];
+    if (firstSegment) {
+      let candidate = firstSegment.replace(/-\d{7,}$/, "");
+
+      // Nếu candidate không phải toàn số
+      if (!/^\d+$/.test(candidate)) {
+        const withSpaces = candidate.replace(/[-_.]+/g, " ").trim();
+        const formatted = capitalizeWords(withSpaces);
+        if (formatted) return formatted;
+      } else {
+        const secondSegment = segments[1];
+        if (secondSegment && !/^\d+$/.test(secondSegment)) {
+          const withSpaces = secondSegment.replace(/[-_.]+/g, " ").trim();
+          const formatted = capitalizeWords(withSpaces);
+          if (formatted) return formatted;
+        } else {
+          return `Fanpage ${candidate}`;
+        }
+      }
+    }
+
+    if (idParam) {
+      return `Fanpage ${idParam}`;
+    }
+  } catch {
+    // URL không hợp lệ hoặc parse lỗi
+  }
+  return "Fanpage Facebook";
+}
+
 // Link mở thẳng tới trang của tài khoản khi người dùng bấm vào nick:
 // - Ưu tiên link trang cá nhân đã lưu (profile_url).
+// - Nếu link chỉ là trang chủ chung https://facebook.com/ thì fallback sang facebook.com/me
 // - Instagram: suy ra từ username dạng @… ở tên/ghi chú.
 // - Facebook đang đăng nhập (đã liên kết): facebook.com/me
 //   tự chuyển tới đúng trang cá nhân của nick đang đăng nhập trên trình duyệt.
 // Ngoài các trường hợp trên trả "" — giao diện hiện ô nhập link để bổ sung.
 export function deriveProfileUrl(r: AccountRow): string {
   const stored = r.profileUrl.trim();
-  if (stored) return stored;
+  const isGenericFbHome = /^https?:\/\/(www\.)?facebook\.com\/?$/i.test(stored);
+  if (stored && !isGenericFbHome) return stored;
   if (r.platform === "Instagram") {
     const candidate = [r.name, r.handle].find((v) => v.trim().startsWith("@"));
     const username = candidate?.trim().slice(1).split(/\s/)[0] ?? "";
@@ -108,11 +183,12 @@ export function toPageOut(
   r: PageRow,
   accountName: string,
 ): z.infer<typeof pageOut> {
+  const name = r.name.trim() || extractFacebookPageName(r.url);
   return {
     id: r.id,
     account_id: r.accountId,
     account_name: accountName,
-    name: r.name,
+    name,
     url: r.url,
     role: r.role,
     selected: r.selected === 1,

@@ -605,19 +605,32 @@ export function AccountItemCard({
 
       {/* ================= 4. HÀNG THAO TÁC (Mở trang, Fanpage, Thêm Fanpage trên cùng một hàng) ================= */}
       <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-[var(--border)] pt-2 text-xs">
-        {/* Nút mở trang cá nhân */}
-        <div>
+        {/* Nút mở trang cá nhân & Sửa link */}
+        <div className="flex items-center gap-1.5">
           {a.profile_url ? (
-            <a
-              href={a.profile_url}
-              target="_blank"
-              rel="noreferrer"
-              aria-label={`Mở trang tài khoản ${a.name}`}
-              className="inline-flex items-center gap-1 font-semibold text-[var(--accent-ink)] hover:underline"
-            >
-              <span>Mở trang</span>
-              <span>↗</span>
-            </a>
+            <>
+              <a
+                href={a.profile_url}
+                target="_blank"
+                rel="noreferrer"
+                aria-label={`Mở trang tài khoản ${a.name}`}
+                className="font-semibold text-[var(--accent-ink)] hover:underline"
+              >
+                Mở trang
+              </a>
+              <span className="text-[var(--border)]">·</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsEditingUrl(true);
+                  setUrlDraft(a.profile_url || "");
+                }}
+                className="text-[11px] text-[var(--dim)] hover:text-[var(--text)] transition-colors"
+                title="Xem hoặc chỉnh sửa link của tài khoản này"
+              >
+                Sửa link
+              </button>
+            </>
           ) : (
             <button
               type="button"
