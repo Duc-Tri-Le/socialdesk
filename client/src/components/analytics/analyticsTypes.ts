@@ -14,28 +14,6 @@ export type SlotLabel = (typeof SLOT_LABELS)[number];
 
 export type ChannelType = "group" | "page" | "instagram";
 
-export interface ChannelOption {
-  key: string;
-  label: string;
-}
-
-export interface ManualMetricFormData {
-  channel_type: ChannelType;
-  channel_key: string;
-  media_kind: "image" | "video";
-  draft_key: string;
-  posted_at: string;
-  reach: string;
-  likes: string;
-  comments: string;
-  shares: string;
-  clicks: string;
-  inquiries: string;
-  orders: string;
-  notes: string;
-  post_url: string;
-}
-
 export interface QuickEditSalesData {
   id: number;
   inquiries: number;

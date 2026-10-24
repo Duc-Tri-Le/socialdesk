@@ -58,15 +58,21 @@ export function computeSlotStats(
  */
 export function generateChannelRecommendation(
   totalChannelPosts: number,
-  bestSlot: SlotInsight,
+  candidateSlot: SlotInsight | null,
 ): string {
+  if (totalChannelPosts === 0) {
+    return "Chưa có bài đăng nào được ghi nhận ở kênh này.";
+  }
   if (totalChannelPosts < 3) {
-    return `Mới có ${totalChannelPosts} bài được đo ở kênh này — cần ít nhất 3 bài ở các khung giờ khác nhau mới kết luận được khung giờ tốt nhất. Tạm ưu tiên ${bestSlot.slot || "19:00–21:00"}.`;
+    return `Mới có ${totalChannelPosts} bài được ghi nhận ở kênh này — chưa đủ dữ liệu (cần ít nhất 3 bài ở các khung giờ khác nhau) để kết luận khung giờ tốt nhất. Hãy tiếp tục đăng bài để hệ thống có cơ sở phân tích.`;
   }
-  if (bestSlot.posts >= 2) {
-    return `Đăng vào khung ${bestSlot.slot} cho kênh này: điểm tương tác trung bình cao nhất (${bestSlot.avg_score} điểm/bài qua ${bestSlot.posts} bài). Giữ mô tả icon đúng chỗ theo mẫu và dùng đúng media đã gắn vào bài như các bài hiệu quả.`;
+  if (!candidateSlot || candidateSlot.avg_score === 0) {
+    return `Đã đo ${totalChannelPosts} bài nhưng chưa ghi nhận tương tác để xác định khung giờ vượt trội.`;
   }
-  return `Khung ${bestSlot.slot} đang dẫn đầu nhưng mới có 1 bài — đăng thử thêm 1–2 bài nữa vào khung này để xác nhận trước khi chốt lịch cố định cho kênh.`;
+  if (candidateSlot.posts >= 2) {
+    return `Đăng vào khung ${candidateSlot.slot} cho kênh này: điểm tương tác trung bình cao nhất (${candidateSlot.avg_score} điểm/bài qua ${candidateSlot.posts} bài). Giữ phong cách viết và hình ảnh như các bài hiệu quả.`;
+  }
+  return `Khung ${candidateSlot.slot} đang dẫn đầu (${candidateSlot.avg_score} điểm) nhưng mới có 1 bài — đăng thử thêm 1–2 bài nữa vào khung này để xác nhận độ ổn định.`;
 }
 
 /**
@@ -99,12 +105,15 @@ export function analyzeChannel(channel: ChannelGroup): ChannelInsightData {
   });
 
   const slotsWithData = slots.filter((s) => s.posts > 0);
-  const bestSlot = slotsWithData.reduce(
+  const candidateSlot = slotsWithData.reduce(
     (a, b) => (b.avg_score > a.avg_score ? b : a),
     slotsWithData[0] ?? { slot: "", posts: 0, avg_score: 0, total_score: 0 },
   );
 
-  const recommendation = generateChannelRecommendation(totalPosts, bestSlot);
+  // Chỉ kết luận khung giờ tốt nhất khi có ít nhất 3 bài và có điểm tương tác
+  const isReliable = totalPosts >= 3 && candidateSlot && candidateSlot.avg_score > 0;
+  const bestSlot = isReliable ? candidateSlot : null;
+  const recommendation = generateChannelRecommendation(totalPosts, candidateSlot);
 
   return {
     channel_type: channel.type,
@@ -116,9 +125,9 @@ export function analyzeChannel(channel: ChannelGroup): ChannelInsightData {
     total_reach: totalReach,
     total_inquiries: totalInquiries,
     total_orders: totalOrders,
-    best_slot: bestSlot.slot,
-    best_slot_avg: bestSlot.avg_score,
-    best_slot_posts: bestSlot.posts,
+    best_slot: bestSlot ? bestSlot.slot : "",
+    best_slot_avg: bestSlot ? bestSlot.avg_score : 0,
+    best_slot_posts: bestSlot ? bestSlot.posts : 0,
     recommendation,
     slots,
   };
@@ -128,6 +137,10 @@ export function analyzeChannel(channel: ChannelGroup): ChannelInsightData {
  * Tính toán khung giờ có điểm tương tác trung bình cao nhất trên quy mô toàn bộ các kênh.
  */
 export function computeOverallBestSlot(rows: MetricRow[]): { slot: string; avg: number } {
+  if (rows.length < 3) {
+    return { slot: "", avg: 0 };
+  }
+
   const rowsBySlot = new Map<string, MetricRow[]>();
   for (const r of rows) {
     const list = rowsBySlot.get(r.hourSlot);

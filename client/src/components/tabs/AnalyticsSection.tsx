@@ -2,7 +2,6 @@ import {
   useAnalyticsManager,
   ChannelBestSlotCard,
   MetricsHistoryList,
-  ManualMetricForm,
   SyncMetricsToolbar,
 } from "../analytics";
 import { FeedbackBanner } from "../ui";
@@ -12,12 +11,6 @@ export function AnalyticsSection({ onGoQueue }: { onGoQueue: () => void }) {
     analytics,
     analyticsQ,
     metricsQ,
-    form,
-    setForm,
-    channelOptions,
-    packedDrafts,
-    handleFormSubmit,
-    isAdding,
     feedback,
     setFeedback,
     searchKeyword,
@@ -112,16 +105,6 @@ export function AnalyticsSection({ onGoQueue }: { onGoQueue: () => void }) {
         isSavingSales={isSavingSales}
         deleteMetric={deleteMetric}
         scanSingleMetric={scanSingleMetric}
-      />
-
-      {/* 4. Form ghi chỉ số thủ công / tùy chỉnh */}
-      <ManualMetricForm
-        form={form}
-        setForm={setForm}
-        channelOptions={channelOptions}
-        packedDrafts={packedDrafts}
-        onSubmit={handleFormSubmit}
-        isSubmitting={isAdding}
       />
     </div>
   );
