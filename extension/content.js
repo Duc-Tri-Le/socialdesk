@@ -3,59 +3,6 @@
 
 console.log("[Social Desk] Content script đã sẵn sàng trên trang:", window.location.href);
 
-// Hàm tự động phát hiện tên nick Facebook từ trang
-function getFacebookProfileInfo() {
-  let name = "";
-  let profileUrl = "";
-
-  try {
-    // 1. Thử lấy từ các liên kết cá nhân trong menu trái/header
-    const candidateLinks = Array.from(
-      document.querySelectorAll('a[href*="/me/"], a[href*="/me?"], a[href*="profile.php"], div[role="navigation"] a[href*="facebook.com/"]')
-    );
-    for (const a of candidateLinks) {
-      const text = a.innerText?.trim();
-      const href = a.href || "";
-      if (
-        text &&
-        text.length >= 2 &&
-        text.length <= 40 &&
-        !text.includes("Facebook") &&
-        !text.includes("Watch") &&
-        !text.includes("Gaming") &&
-        !text.includes("Video") &&
-        !text.includes("Bảng feed") &&
-        !text.includes("Bạn bè")
-      ) {
-        name = text;
-        profileUrl = href;
-        break;
-      }
-    }
-
-    // 2. Thử tìm qua avatar profile aria-label
-    if (!name) {
-      const ariaProfile = document.querySelector('[aria-label="Trang cá nhân của bạn"], [aria-label="Your profile"]');
-      if (ariaProfile) {
-        const parent = ariaProfile.closest('div[role="button"], a');
-        if (parent && parent.innerText) {
-          name = parent.innerText.trim();
-        }
-      }
-    }
-
-    // 3. Đọc User ID từ Cookie nếu có
-    const matchUser = document.cookie.match(/c_user=(\d+)/);
-    if (matchUser && matchUser[1] && !profileUrl) {
-      profileUrl = `https://www.facebook.com/${matchUser[1]}`;
-    }
-  } catch (e) {
-    console.warn("[Social Desk] Lỗi đọc thông tin nick Facebook:", e);
-  }
-
-  return { name, profileUrl };
-}
-
 // Báo cáo thông tin nick Facebook về Background Script khi trang sẵn sàng
 setTimeout(() => {
   const info = getFacebookProfileInfo();
@@ -92,11 +39,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       });
     return true; // Bắt buộc cho phản hồi bất đồng bộ trong Chrome Extensions
   }
-});
 
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
+  if (request.action === "SCRAPE_POST_METRICS") {
+    const metrics = scrapeFacebookPostEngagement();
+    sendResponse(metrics);
+    return true;
+  }
+});
 
 async function handlePost(payload) {
   const { caption, images = [] } = payload;
@@ -243,193 +192,130 @@ async function handlePost(payload) {
         const arr = fileDataUrl.split(",");
         const mimeMatch = arr[0].match(/:(.*?);/);
         const mime = mimeMatch ? mimeMatch[1] : "image/jpeg";
-        const ext = mime.includes("png") ? "png" : "jpg";
         const bstr = atob(arr[1]);
         let n = bstr.length;
         const u8arr = new Uint8Array(n);
         while (n--) {
           u8arr[n] = bstr.charCodeAt(n);
         }
-        const file = new File([u8arr], `sd_img_${i + 1}.${ext}`, { type: mime });
-        fileObjects.push(file);
-      } catch (fetchErr) {
-        return {
-          success: false,
-          message: `Lỗi tải ảnh #${i + 1} (${fetchErr.message}). Đã dừng tiến trình để tránh đăng bài thiếu ảnh.`,
-        };
+        const fileObj = new File([u8arr], `product_img_${i + 1}.jpg`, { type: mime });
+        fileObjects.push(fileObj);
+      } catch (err) {
+        console.warn(`[Social Desk] Bỏ qua ảnh #${i + 1} do lỗi tải:`, err.message);
       }
     }
 
-    // Tìm input file trong dialog hoặc bấm nút "Ảnh/video" để mở
-    let fileInput = dialog.querySelector('input[type="file"][accept*="image"]');
-    if (!fileInput) {
-      // Tìm nút "Ảnh/video" trong thanh công cụ bài viết
-      const mediaButtons = Array.from(dialog.querySelectorAll('div[role="button"], div[aria-label]'));
-      for (const btn of mediaButtons) {
-        const label = (btn.getAttribute("aria-label") || btn.innerText || "").toLowerCase();
-        if (label.includes("ảnh/video") || label.includes("photo/video") || label.includes("ảnh")) {
-          btn.click();
-          await sleep(1000);
-          break;
+    if (fileObjects.length > 0) {
+      // Tìm input file ẩn của Facebook
+      let fileInput = dialog.querySelector('input[type="file"][accept*="image"]');
+
+      // Nếu chưa có input file, bấm nút mở phần đính kèm ảnh / video
+      if (!fileInput) {
+        const photoButtons = Array.from(dialog.querySelectorAll('div[aria-label*="Ảnh/video"], div[aria-label*="Photo/video"], div[aria-label*="Ảnh"]'));
+        for (const pb of photoButtons) {
+          if (isElementVisible(pb)) {
+            pb.click();
+            await sleep(800);
+            fileInput = dialog.querySelector('input[type="file"][accept*="image"]');
+            break;
+          }
         }
       }
-      fileInput = dialog.querySelector('input[type="file"][accept*="image"]') || document.querySelector('input[type="file"][accept*="image"]');
-    }
 
-    if (!fileInput) {
-      return {
-        success: false,
-        message: "Không tìm thấy nút đính kèm ảnh trong hộp thoại soạn bài của Facebook.",
-      };
-    }
-
-    // Gán file vào input bằng DataTransfer
-    const dt = new DataTransfer();
-    fileObjects.forEach((f) => dt.items.add(f));
-    fileInput.files = dt.files;
-    fileInput.dispatchEvent(new Event("change", { bubbles: true }));
-    fileInput.dispatchEvent(new Event("input", { bubbles: true }));
-
-    console.log(`[Social Desk] Đã nạp ${fileObjects.length} ảnh vào input, đang chờ Facebook render...`);
-
-    // Chờ Facebook tải và render thumbnail ảnh vào dialog (tối đa 12s)
-    let imagesRendered = false;
-    for (let w = 0; w < 24; w++) {
-      await sleep(500);
-      const previewImgs = dialog.querySelectorAll('img[src^="blob:"], img[src*="fbcdn"], div[aria-label*="Ảnh"]');
-      const progressBars = dialog.querySelectorAll('div[role="progressbar"]');
-      if (previewImgs.length > 0 && progressBars.length === 0) {
-        imagesRendered = true;
-        break;
+      if (fileInput) {
+        try {
+          const dt = new DataTransfer();
+          fileObjects.forEach((f) => dt.items.add(f));
+          fileInput.files = dt.files;
+          fileInput.dispatchEvent(new Event("change", { bubbles: true }));
+          console.log(`[Social Desk] Đã đính kèm thành công ${fileObjects.length} ảnh vào bài`);
+          // Đợi Facebook tải và hiển thị thumbnail ảnh (3-5 giây)
+          await sleep(3500);
+        } catch (inputErr) {
+          console.warn("[Social Desk] Lỗi gán DataTransfer vào file input:", inputErr);
+        }
+      } else {
+        console.warn("[Social Desk] Không tìm thấy input tải ảnh trong dialog Facebook");
       }
     }
-
-    if (!imagesRendered) {
-      console.warn("[Social Desk] Cảnh báo: Chưa xác nhận được ảnh hiển thị xong, tiếp tục kiểm tra nút Đăng...");
-    }
   }
 
-  // 6. Tìm nút "Đăng" (Post)
-  console.log("[Social Desk] Đang tìm nút Đăng...");
-  await sleep(1000);
+  // 6. Tìm nút "Đăng" / "Post"
+  console.log("[Social Desk] Đang tìm nút Đăng bài...");
+  const postButtons = Array.from(
+    dialog.querySelectorAll('div[aria-label="Đăng"], div[aria-label="Post"], div[aria-label="Tiếp"], div[aria-label="Next"], div[role="button"]')
+  );
 
-  const postBtnSelectors = [
-    'div[role="dialog"] div[aria-label="Đăng"]',
-    'div[role="dialog"] div[aria-label="Post"]',
-    'div[role="dialog"] div[aria-label="Chia sẻ"]',
-    'div[role="dialog"] div[aria-label="Share"]',
-    'div[role="dialog"] div[aria-label="Tiếp"]',
-  ];
-
-  let postButton = null;
-  for (const sel of postBtnSelectors) {
-    postButton = dialog.querySelector(sel);
-    if (postButton && isElementVisible(postButton)) break;
-  }
-
-  if (!postButton) {
-    // Tìm qua text hiển thị của các nút trong dialog
-    const candidateButtons = Array.from(dialog.querySelectorAll('div[role="button"]'));
-    for (const b of candidateButtons) {
-      const text = (b.innerText || "").trim().toLowerCase();
-      if (text === "đăng" || text === "post" || text === "chia sẻ" || text === "tiếp" || text === "next") {
-        postButton = b;
+  let submitBtn = null;
+  for (const btn of postButtons) {
+    const text = (btn.innerText || btn.getAttribute("aria-label") || "").trim().toLowerCase();
+    const isAriaPost = btn.getAttribute("aria-label") === "Đăng" || btn.getAttribute("aria-label") === "Post";
+    if (isAriaPost || text === "đăng" || text === "post") {
+      if (isElementVisible(btn) && btn.getAttribute("aria-disabled") !== "true") {
+        submitBtn = btn;
         break;
       }
     }
   }
 
-  if (!postButton) {
+  if (!submitBtn) {
     return {
       success: false,
-      message: "Đã soạn xong bài nhưng không tìm thấy nút 'Đăng' để hoàn tất.",
+      message: "Nút 'Đăng' chưa sẵn sàng hoặc bị vô hiệu hóa (Facebook có thể đang tải ảnh hoặc yêu cầu thêm thông tin).",
     };
   }
 
-  // Chờ tối đa 8s nếu nút Đăng đang bị khóa (chờ upload ảnh hoặc Facebook xử lý)
-  for (let c = 0; c < 16; c++) {
-    const disabled = postButton.getAttribute("aria-disabled") === "true" || postButton.classList.contains("disabled");
-    if (!disabled) break;
-    await sleep(500);
-  }
+  // 7. Bấm Đăng bài
+  submitBtn.scrollIntoView({ behavior: "smooth", block: "center" });
+  await sleep(400);
+  submitBtn.click();
+  console.log("[Social Desk] Đã bấm nút Đăng bài trên Facebook.");
 
-  if (postButton.getAttribute("aria-disabled") === "true") {
-    return {
-      success: false,
-      message: "Nút Đăng đang bị khóa (Facebook đang tải ảnh chưa xong hoặc yêu cầu bổ sung thông tin).",
-    };
-  }
-
-  // 7. Bấm nút ĐĂNG
-  postButton.scrollIntoView({ behavior: "smooth", block: "center" });
-  await sleep(300);
-  postButton.click();
-  console.log("[Social Desk] Đã bấm nút ĐĂNG, bắt đầu quy trình xác minh kết quả...");
-
-  // 8. XÁC MINH KẾT QUẢ THỰC TẾ (Chờ tối đa 35 giây)
-  const maxVerifySeconds = 35;
-  for (let s = 1; s <= maxVerifySeconds; s++) {
+  // 8. Chờ bài đăng gửi xong (dialog đóng lại hoặc xuất hiện thông báo)
+  let postFinished = false;
+  let isPendingApproval = false;
+  for (let t = 0; t < 25; t++) {
     await sleep(1000);
 
-    // Kiểm tra thông báo lỗi từ Facebook
-    const errorAlerts = Array.from(document.querySelectorAll('div[role="alert"], div[role="alertdialog"]'));
-    for (const alertEl of errorAlerts) {
-      const errText = (alertEl.innerText || "").toLowerCase();
-      if (
-        errText.includes("không thể chia sẻ") ||
-        errText.includes("đã xảy ra lỗi") ||
-        errText.includes("bị hạn chế") ||
-        errText.includes("bị chặn") ||
-        errText.includes("something went wrong") ||
-        errText.includes("could not post") ||
-        errText.includes("we limit how often")
-      ) {
-        return {
-          success: false,
-          message: `Facebook từ chối bài đăng: "${alertEl.innerText.trim().slice(0, 150)}"`,
-        };
-      }
-    }
-
-    // Kiểm tra thông báo phê duyệt bài viết trong Nhóm (Pending Approval)
-    const pageText = document.body.innerText.toLowerCase();
+    // Kiểm tra xem bài có chuyển sang chế độ Chờ duyệt (Pending approval) của Nhóm không
+    const bodyText = document.body.innerText;
     if (
-      pageText.includes("chờ quản trị viên phê duyệt") ||
-      pageText.includes("đang chờ phê duyệt") ||
-      pageText.includes("pending approval")
+      bodyText.includes("đã gửi bài viết của bạn") ||
+      bodyText.includes("bài viết của bạn đang chờ phê duyệt") ||
+      bodyText.includes("chờ quản trị viên phê duyệt") ||
+      bodyText.includes("pending approval") ||
+      bodyText.includes("submitted for approval")
     ) {
-      return {
-        success: true,
-        pendingApproval: true,
-        message: "Bài viết đã được gửi vào nhóm thành công và đang chờ Quản trị viên duyệt.",
-        postUrl: window.location.href,
-      };
+      isPendingApproval = true;
+      postFinished = true;
+      break;
     }
 
-    // Kiểm tra xem hộp thoại soạn thảo đã ĐÓNG hoàn toàn chưa
-    const activeDialog = document.querySelector('div[role="dialog"]');
-    if (!activeDialog || !isElementVisible(activeDialog)) {
-      // Hộp thoại đã đóng thành công mà không có thông báo lỗi
-      return {
-        success: true,
-        message: "Đã xác minh bài đăng xuất hiện thành công trên Facebook!",
-        postUrl: window.location.href,
-      };
+    // Nếu dialog soạn bài đã biến mất → Bài đăng đã gửi thành công
+    const currentDialog = document.querySelector('div[role="dialog"]');
+    if (!currentDialog || !isElementVisible(currentDialog)) {
+      postFinished = true;
+      break;
     }
   }
 
-  // Nếu hết 35s mà dialog vẫn mở
+  if (!postFinished) {
+    return {
+      success: false,
+      message: "Facebook xử lý đăng bài quá lâu hoặc xuất hiện cảnh báo chặn tính năng.",
+    };
+  }
+
+  // 9. Thử lấy permalink bài viết vừa đăng
+  await sleep(2000);
+  const detectedPostUrl = await tryDetectPostPermalink(payload.targetUrl || window.location.href);
+
   return {
-    success: false,
-    message: "Hộp thoại Facebook chưa đóng sau 35s. Có thể mạng chậm hoặc Facebook yêu cầu xác minh bảo mật.",
+    success: true,
+    postUrl: detectedPostUrl || payload.targetUrl || window.location.href,
+    pendingApproval: isPendingApproval,
+    message: isPendingApproval
+      ? "Đã gửi bài thành công (Bài đang chờ Quản trị viên nhóm phê duyệt)"
+      : "Đã đăng bài thành công lên Facebook",
   };
-}
-
-function isElementVisible(el) {
-  if (!el) return false;
-  const style = window.getComputedStyle(el);
-  if (style.display === "none" || style.visibility === "hidden" || style.opacity === "0") {
-    return false;
-  }
-  return el.offsetWidth > 0 && el.offsetHeight > 0;
 }

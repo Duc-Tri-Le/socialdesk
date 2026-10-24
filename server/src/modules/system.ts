@@ -3,7 +3,7 @@ import { asc, eq } from "drizzle-orm";
 import * as schema from "../schema";
 import {
   getSheetSettings,
-  getSetting,
+  getSettingsByPrefix,
   MAX_POSTS_PER_DAY,
   MIN_INTERVAL_MINUTES,
 } from "../services/settings";
@@ -185,7 +185,7 @@ export const systemActions = {
     }),
     async handler(ctx) {
       const db = ctx.db<typeof schema>();
-      const [prods, grps, drfts, media, packed, accs, pgs, mets, pubRecs] =
+      const [prods, grps, drfts, media, packed, accs, pgs, mets, pubRecs, sessionMap, sheet, joinCtx] =
         await Promise.all([
           db.select().from(schema.products),
           db.select().from(schema.fbGroups),
@@ -205,26 +205,22 @@ export const systemActions = {
             .orderBy(asc(schema.fbPages.id)),
           db.select().from(schema.postMetrics),
           db.select().from(schema.publishRecords),
+          getSettingsByPrefix(db, "account_session_"),
+          getSheetSettings(db),
+          loadJoinContext(db),
         ]);
       const publishedDraftIds = new Set(
         pubRecs.filter((r) => r.status === "published").map((r) => r.draftId),
       );
       const accountNameById = new Map(accs.map((a) => [a.id, a.name]));
-      // Số nhóm đã tham gia đếm TÁCH RIÊNG theo danh tính: tài
-      // khoản chính một số, Page con một số — không gộp chung vì
-      // hai phía có thể khác trạng thái với cùng một nhóm.
-      const joinCtx = await loadJoinContext(db);
-      const sheet = await getSheetSettings(db);
       const today = vnDateKey(new Date());
       const packedToday = packed.filter(
         (d) => d.packedAt && vnDateKey(d.packedAt) === today,
       ).length;
-      const accountsOut = await Promise.all(
-        accs.map(async (a) => {
-          const savedStatus = await getSetting(db, `account_session_${a.id}`);
-          return toAccountOut(a, savedStatus);
-        }),
-      );
+      const accountsOut = accs.map((a) => {
+        const savedStatus = sessionMap.get(`account_session_${a.id}`) ?? "";
+        return toAccountOut(a, savedStatus);
+      });
       return {
         accounts: accountsOut,
         pages: pgs.map((p) =>

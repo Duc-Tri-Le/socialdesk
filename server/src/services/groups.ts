@@ -2,6 +2,7 @@ import { z } from "@hatch/space-sdk";
 import { and, asc, desc, eq } from "drizzle-orm";
 import * as schema from "../schema";
 import type { Db } from "./settings";
+import { extractFacebookPageName } from "../types";
 
 export const groupMembershipOut = z.object({
   identity_kind: z.enum(["account", "page", "instagram"]),
@@ -77,13 +78,14 @@ export async function loadJoinContext(db: Db): Promise<JoinContext> {
   // loại khỏi danh sách nhóm đích khi nick chủ đang tắt chọn, trong
   // khi mục Fanpage chỉ xét cờ chọn của Page nên hai mục không
   // đồng nhất). Trạng thái của Page và tài khoản chính tính riêng.
-  for (const p of pages)
+  for (const p of pages) {
     identities.push({
       kind: "page",
       id: p.id,
-      name: p.name,
+      name: p.name.trim() || extractFacebookPageName(p.url),
       posting: p.selected === 1,
     });
+  }
   return { identities, memMap, primaryAccountId: fbAccounts[0]?.id ?? 0 };
 }
 
@@ -168,13 +170,14 @@ export function joinedPostingPages(
 export async function syncStoredGroupJoined(
   db: Db,
   groupId: number,
+  cachedJc?: JoinContext,
 ): Promise<void> {
   const [group] = await db
     .select()
     .from(schema.fbGroups)
     .where(eq(schema.fbGroups.id, groupId));
   if (!group) return;
-  const jc = await loadJoinContext(db);
+  const jc = cachedJc ?? (await loadJoinContext(db));
   const joined = accountCountsAsJoined(jc, group);
   if ((group.joined === 1) !== joined) {
     await db

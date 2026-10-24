@@ -12,6 +12,36 @@ import {
   parseDriveImages,
 } from "../services/drive";
 
+export type ProductRow = typeof schema.products.$inferSelect;
+
+export function toProductOut(r: ProductRow): z.infer<typeof productOut> {
+  const driveImages = parseDriveImages(r.driveImages);
+  return {
+    id: r.id,
+    stt: r.stt,
+    sku: r.sku || buildSku(r.stt, r.name, r.color),
+    name: r.name,
+    scale: r.scale,
+    maker: r.maker,
+    size: r.size,
+    color: r.color,
+    colors: parseColors(r.colors, r.color),
+    price: r.price,
+    stock: r.stock,
+    ship: r.ship,
+    image_url: normalizeSheetImageUrl(r.imageUrl),
+    video_url: r.videoUrl,
+    drive_folder_id: r.driveFolderId,
+    drive_status: r.driveStatus,
+    drive_error: r.driveError,
+    drive_checked_at: r.driveCheckedAt,
+    drive_images: driveImages,
+    has_real_image: r.driveStatus === "ok" && driveImages.length > 0,
+    source: r.source,
+    created_at: r.createdAt.toISOString(),
+  };
+}
+
 export const productActions = {
 
   // -------------------------------------------------------------- products
@@ -24,36 +54,7 @@ export const productActions = {
         .select()
         .from(schema.products)
         .orderBy(desc(schema.products.id));
-      return {
-        products: rows.map((r) => ({
-          id: r.id,
-          stt: r.stt,
-          // Sản phẩm cũ chưa có SKU thì dựng tại chỗ theo quy định
-          // "STT-Tên-Màu" để giao diện luôn có mã đối chiếu.
-          sku: r.sku || buildSku(r.stt, r.name, r.color),
-          name: r.name,
-          scale: r.scale,
-          maker: r.maker,
-          size: r.size,
-          color: r.color,
-          colors: parseColors(r.colors, r.color),
-          price: r.price,
-          stock: r.stock,
-          ship: r.ship,
-          image_url: normalizeSheetImageUrl(r.imageUrl),
-          video_url: r.videoUrl,
-          drive_folder_id: r.driveFolderId,
-          drive_status: r.driveStatus,
-          drive_error: r.driveError,
-          drive_checked_at: r.driveCheckedAt,
-          drive_images: parseDriveImages(r.driveImages),
-          has_real_image:
-            r.driveStatus === "ok" &&
-            parseDriveImages(r.driveImages).length > 0,
-          source: r.source,
-          created_at: r.createdAt.toISOString(),
-        })),
-      };
+      return { products: rows.map(toProductOut) };
     },
   }),
 

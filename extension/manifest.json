@@ -26,6 +26,7 @@
         "*://*.facebook.com/*"
       ],
       "js": [
+        "content_utils.js",
         "content.js"
       ],
       "run_at": "document_idle"

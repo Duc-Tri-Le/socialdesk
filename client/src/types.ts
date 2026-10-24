@@ -10,6 +10,7 @@ export type Run = ApiResponse<typeof api, "listResearch">["runs"][number];
 export type Group = ApiResponse<typeof api, "listGroups">["groups"][number];
 export type ScannedGroup = ApiResponse<typeof api, "saveGroupLinks">["scanned"][number];
 export type Draft = ApiResponse<typeof api, "listDrafts">["drafts"][number];
+export type PublishRecord = Draft["publish_records"][number];
 export type MediaItem = ApiResponse<typeof api, "listMedia">["media"][number];
 export type Metric = ApiResponse<typeof api, "listPostMetrics">["metrics"][number];
 export type Analytics = ApiResponse<typeof api, "getAnalytics">;

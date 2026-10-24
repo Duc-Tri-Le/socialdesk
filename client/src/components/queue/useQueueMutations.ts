@@ -1,0 +1,160 @@
+import { useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { api } from "../../api";
+import type { Draft } from "../../types";
+import { useComposeJobs } from "../../context/ComposeJobsContext";
+
+export function useQueueMutations({
+  onPublishSuccess,
+  onApproveSuccess,
+}: {
+  onPublishSuccess?: () => void;
+  onApproveSuccess?: () => void;
+} = {}) {
+  const queryClient = useQueryClient();
+  const composeJobs = useComposeJobs();
+  const [feedback, setFeedback] = useState<Record<number, { ok: boolean; text: string }>>({});
+
+  const refresh = () => {
+    queryClient.invalidateQueries({ queryKey: ["drafts"] });
+    queryClient.invalidateQueries({ queryKey: ["overview"] });
+  };
+
+  const setMainAccount = useMutation({
+    mutationFn: (args: { id: number; selected: boolean }) => api.setAccountSelected(args),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["accounts"] });
+      queryClient.invalidateQueries({ queryKey: ["groups"] });
+      queryClient.invalidateQueries({ queryKey: ["overview"] });
+    },
+  });
+
+  const approve = useMutation({
+    mutationFn: (id: number) => api.approveDraft({ id }),
+    onSuccess: (res, id) => {
+      setFeedback((f) => ({ ...f, [id]: { ok: res.ok, text: res.message } }));
+      if (res.ok) {
+        onApproveSuccess?.();
+      }
+      refresh();
+    },
+  });
+
+  const update = useMutation({
+    mutationFn: (args: { id: number; caption: string }) => api.updateDraft(args),
+    onSuccess: (res, args) => {
+      setFeedback((f) => ({
+        ...f,
+        [args.id]: {
+          ok: res.ok,
+          text: res.ok ? "Đã lưu nội dung." : res.error,
+        },
+      }));
+      refresh();
+    },
+  });
+
+  const pack = useMutation({
+    mutationFn: (args: {
+      id: number;
+      group_ids: number[];
+      page_ids: number[];
+      instagram_account_ids: number[];
+    }) => api.buildPack(args),
+    onSuccess: (res, args) => {
+      setFeedback((f) => ({ ...f, [args.id]: { ok: res.ok, text: res.message } }));
+      refresh();
+    },
+  });
+
+  const saveTargets = useMutation({
+    mutationFn: (args: {
+      id: number;
+      group_ids: number[];
+      page_ids: number[];
+      instagram_account_ids: number[];
+    }) => api.saveDraftTargets(args),
+    onSuccess: (res, args) => {
+      if (!res.ok) {
+        setFeedback((f) => ({ ...f, [args.id]: { ok: false, text: res.message } }));
+      }
+      refresh();
+    },
+  });
+
+  const publish = useMutation({
+    mutationFn: (args: {
+      id: number;
+      group_ids: number[];
+      page_ids: number[];
+      instagram_account_ids: number[];
+    }) => api.publishDraft(args),
+    onSuccess: (res, args) => {
+      setFeedback((f) => ({ ...f, [args.id]: { ok: res.ok, text: res.message } }));
+      if (res.ok && res.results.some((r) => r.status === "published")) {
+        onPublishSuccess?.();
+      }
+      refresh();
+    },
+    onError: (err, args) => {
+      setFeedback((f) => ({
+        ...f,
+        [args.id]: {
+          ok: false,
+          text: `Đăng Bài không chạy được: ${
+            err instanceof Error ? err.message : "lỗi không rõ"
+          } — kiểm tra đích đăng trước khi thử lại để tránh trùng.`,
+        },
+      }));
+    },
+  });
+
+  const del = useMutation({
+    mutationFn: (id: number) => api.deleteDraft({ id }),
+    onSuccess: refresh,
+  });
+
+  const enqueueRewrite = (d: Draft) => {
+    composeJobs.enqueue({
+      kind: "rewrite",
+      draftId: d.id,
+      label: d.product_name,
+      run: async () => {
+        const res = await api.rewriteDraft({ id: d.id });
+        if (!res.ok) throw new Error(res.message);
+        return res;
+      },
+      onDone: (result) => {
+        const res = result as { ok: boolean; message: string };
+        setFeedback((f) => ({ ...f, [d.id]: { ok: true, text: res.message } }));
+        refresh();
+      },
+      onError: (message) => {
+        setFeedback((f) => ({
+          ...f,
+          [d.id]: { ok: false, text: `Không viết lại được: ${message}` },
+        }));
+      },
+    });
+    setFeedback((f) => ({
+      ...f,
+      [d.id]: {
+        ok: true,
+        text: "Đã đưa bài vào hàng đợi viết lại — theo dõi ở vòng tròn tiến trình.",
+      },
+    }));
+  };
+
+  return {
+    feedback,
+    setFeedback,
+    setMainAccount,
+    approve,
+    update,
+    pack,
+    saveTargets,
+    publish,
+    del,
+    enqueueRewrite,
+  };
+}

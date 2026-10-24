@@ -250,7 +250,7 @@ export function ProductListCard({
           <Badge variant="dim">Chưa có video</Badge>
         )}
       </p>
-      <DriveImageStrip images={p.drive_images} label={p.name} max={7} />
+      <DriveImageStrip images={p.drive_images} label={p.name} max={6} />
       {children}
     </li>
   );
@@ -346,8 +346,8 @@ export function ProductListControls({
 
 export function ProductListPagination({
   navLabel,
-  prevLabel = "← Trang trước",
-  nextLabel = "Trang sau →",
+  prevLabel = "Trang trước",
+  nextLabel = "Trang sau",
   page,
   totalPages,
   rangeStart,
@@ -356,10 +356,10 @@ export function ProductListPagination({
   onPage,
 }: {
   navLabel: string;
-  prevLabel: string;
-  nextLabel: string;
-  pageLabel: (n: number) => string;
-  pageNumbers: number[];
+  prevLabel?: string;
+  nextLabel?: string;
+  pageLabel?: (n: number) => string;
+  pageNumbers?: number[];
   page: number;
   totalPages: number;
   rangeStart: number;

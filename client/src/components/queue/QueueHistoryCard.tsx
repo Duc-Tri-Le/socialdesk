@@ -1,9 +1,11 @@
 import { useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { api } from "../../api";
 import type { Draft } from "../../types";
 import { fmtDate } from "../../utils/format";
-import { btnDanger, btnGhost } from "../../utils/styles";
+import { btnDanger, btnGhost, btnPrimary, inputCls } from "../../utils/styles";
 import { Badge, DriveImageStrip, FeedbackBanner } from "../ui";
-import { getKindLabel } from "./queueHelpers";
+import { getKindLabel, getPostLinkInfo } from "./queueHelpers";
 
 export interface QueueHistoryCardProps {
   draft: Draft;
@@ -18,7 +20,19 @@ export function QueueHistoryCard({
   onDelete,
   isDeletePending,
 }: QueueHistoryCardProps) {
+  const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
+  const [editingRecordId, setEditingRecordId] = useState<number | null>(null);
+  const [editUrlDraft, setEditUrlDraft] = useState("");
+
+  const saveUrlMutation = useMutation({
+    mutationFn: (args: { id: number; post_url: string }) =>
+      api.setPublishRecordPostUrl(args),
+    onSuccess: () => {
+      queryClient.invalidateQueries();
+      setEditingRecordId(null);
+    },
+  });
 
   // Mỗi đích chỉ hiện bản ghi ĐÃ ĐĂNG mới nhất của đích đó
   const publishedByTarget = new Map<string, Draft["publish_records"][number]>();
@@ -93,17 +107,93 @@ export function QueueHistoryCard({
                   {r.message && (
                     <span className="block text-[var(--dim)]">{r.message}</span>
                   )}
-                  {r.post_url && (
-                    <a
-                      href={r.post_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="font-semibold underline"
-                      aria-label={`Xem bài đã đăng của ${d.product_name} trên ${r.target_name}`}
-                    >
-                      Xem bài đã đăng
-                    </a>
-                  )}
+                  {(() => {
+                    const linkInfo = getPostLinkInfo(r, d.product_name);
+                    const isEditing = editingRecordId === r.id;
+
+                    return (
+                      <div className="mt-1 space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          {linkInfo && (
+                            <a
+                              href={linkInfo.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="font-semibold underline text-[var(--accent-ink)] hover:text-[var(--text)] transition-colors"
+                              aria-label={`${linkInfo.label} của ${d.product_name} trên ${r.target_name}`}
+                            >
+                              {linkInfo.label}
+                            </a>
+                          )}
+
+                          {linkInfo?.searchUrl && linkInfo?.groupUrl && (
+                            <a
+                              href={linkInfo.groupUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-[11px] text-[var(--dim)] hover:text-[var(--text)] underline"
+                              title="Mở toàn bộ trang nhóm Facebook"
+                            >
+                              Mở trang nhóm
+                            </a>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (isEditing) {
+                                setEditingRecordId(null);
+                              } else {
+                                setEditingRecordId(r.id);
+                                setEditUrlDraft(r.post_url || "");
+                              }
+                            }}
+                            className="text-[11px] text-[var(--dim)] hover:text-[var(--text)] underline transition-colors"
+                            title="Chỉnh sửa hoặc dán link bài viết trực tiếp"
+                          >
+                            {isEditing ? "Đóng sửa" : r.post_url ? "Sửa link bài" : "+ Gán link bài"}
+                          </button>
+
+                          {linkInfo?.hint && (
+                            <span className="text-[11px] text-[var(--dim)]">
+                              · {linkInfo.hint}
+                            </span>
+                          )}
+                        </div>
+
+                        {isEditing && (
+                          <div className="mt-1.5 flex flex-wrap items-center gap-1.5 rounded bg-[var(--surface-alt)] p-2">
+                            <input
+                              className={`${inputCls} min-w-0 flex-1 text-xs py-1`}
+                              value={editUrlDraft}
+                              onChange={(e) => setEditUrlDraft(e.target.value)}
+                              placeholder="Dán link bài viết trực tiếp (https://facebook.com/groups/.../posts/...)"
+                            />
+                            <button
+                              type="button"
+                              className={`${btnPrimary} py-1 text-xs`}
+                              disabled={saveUrlMutation.isPending}
+                              onClick={() => {
+                                saveUrlMutation.mutate({
+                                  id: r.id,
+                                  post_url: editUrlDraft.trim(),
+                                });
+                              }}
+                            >
+                              {saveUrlMutation.isPending ? "Đang lưu…" : "Lưu link"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEditingRecordId(null)}
+                              className="text-xs text-[var(--dim)] hover:text-[var(--text)] px-2"
+                            >
+                              Hủy
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </li>
               ))}
             </ul>

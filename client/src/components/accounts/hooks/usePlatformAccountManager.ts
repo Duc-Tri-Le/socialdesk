@@ -6,6 +6,7 @@ import {
   getSessionStatus,
   isAccountOnline,
 } from "../utils/accountFilters";
+import { usePagination } from "../../ui/Pagination";
 
 export const PAGE_SIZE = 10;
 
@@ -31,7 +32,6 @@ export function usePlatformAccountManager({
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<StatusFilter>("all");
   const [sort, setSort] = useState<SortOption>("selected_first");
-  const [page, setPage] = useState(1);
 
   // Thống kê nhanh theo trạng thái (chỉ tính lại khi danh sách nick đổi)
   const stats = useMemo(() => {
@@ -64,30 +64,25 @@ export function usePlatformAccountManager({
     });
   }, [platformAccounts, search, filter, sort, onlineCodes, pages]);
 
-  // Phân trang
-  const totalItems = filteredAccounts.length;
-  const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE));
-  const safePage = Math.min(Math.max(1, page), totalPages);
+  // Phân trang dùng chung qua usePagination
+  const pagination = usePagination(filteredAccounts, { pageSize: PAGE_SIZE });
 
   const pagedAccounts = useMemo(() => {
     if (scrollLayout === "scroll") {
       return filteredAccounts;
     }
-    return filteredAccounts.slice(
-      (safePage - 1) * PAGE_SIZE,
-      safePage * PAGE_SIZE,
-    );
-  }, [filteredAccounts, scrollLayout, safePage]);
+    return pagination.pagedItems;
+  }, [filteredAccounts, scrollLayout, pagination.pagedItems]);
 
   // Handlers
   const handleSearchChange = (val: string) => {
     setSearch(val);
-    setPage(1);
+    pagination.resetPage();
   };
 
   const handleFilterChange = (newFilter: StatusFilter) => {
     setFilter(newFilter);
-    setPage(1);
+    pagination.resetPage();
   };
 
   const handleSelectAll = () => {
@@ -121,14 +116,15 @@ export function usePlatformAccountManager({
     search,
     filter,
     sort,
-    page: safePage,
-    totalPages,
-    totalItems,
+    page: pagination.page,
+    totalPages: pagination.totalPages,
+    totalItems: pagination.totalItems,
+    paginationProps: pagination.paginationProps,
     stats,
     filteredAccounts,
     pagedAccounts,
     setSort,
-    setPage,
+    setPage: pagination.setPage,
     handleSearchChange,
     handleFilterChange,
     handleSelectAll,

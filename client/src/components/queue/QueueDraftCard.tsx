@@ -1,8 +1,6 @@
 import { useState, useEffect } from "react";
 import type { Account, Draft, Group, Page } from "../../types";
-import { fmtDate } from "../../utils/format";
 import {
-  btnDanger,
   btnGhost,
   btnPrimary,
   inputCls,
@@ -12,7 +10,11 @@ import { Badge, DriveImageStrip, FeedbackBanner } from "../ui";
 import { useComposeJobs } from "../../context/ComposeJobsContext";
 import { TargetPicker } from "./TargetPicker";
 import { PublishConfirmDialog } from "./PublishConfirmDialog";
-import { getKindLabel, getLatestPublishRecords, getPublishStatusBadge } from "./queueHelpers";
+import { PublishRecordsList } from "./PublishRecordsList";
+import { QueueDraftActions } from "./QueueDraftActions";
+import { QueueDraftHeader } from "./QueueDraftHeader";
+import { DraftPackViewer } from "./DraftPackViewer";
+import { getLatestPublishRecords } from "./queueHelpers";
 
 export interface QueueDraftCardProps {
   draft: Draft;
@@ -83,10 +85,8 @@ export function QueueDraftCard({
   const [open, setOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [captionDraft, setCaptionDraft] = useState(d.caption);
-  const [packOpen, setPackOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [publishConfirm, setPublishConfirm] = useState(false);
-  const [copied, setCopied] = useState(false);
 
   // Khởi tạo đích đăng từ bản đã lưu hoặc từ cấu hình mặc định
   const savedTargets = d.pack_targets;
@@ -125,16 +125,6 @@ export function QueueDraftCard({
       page_ids: pages,
       instagram_account_ids: igs,
     });
-  };
-
-  const handleCopyPack = async () => {
-    try {
-      await navigator.clipboard.writeText(d.pack_text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // Fallback
-    }
   };
 
   const rwJob = composeJobs.jobs.find(
@@ -188,39 +178,15 @@ export function QueueDraftCard({
 
   return (
     <li className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] p-4">
-      {/* Header */}
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <p className="font-semibold">{d.product_name}</p>
-        <p className="font-mono text-xs text-[var(--dim)]">
-          {d.code} · {fmtDate(d.created_at)}
-        </p>
-      </div>
-
-      {/* Dòng tóm tắt trạng thái gọn nhẹ như Lịch sử bài đăng */}
-      <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs">
-        {isDraft ? (
-          <Badge variant="accent">⏳ Chờ duyệt</Badge>
-        ) : (
-          <Badge variant="ok">✓ Đã duyệt</Badge>
-        )}
-        {summaryParts.length > 0 && (
-          <span className="font-medium text-[var(--dim)]">
-            {summaryParts.join(" · ")}
-          </span>
-        )}
-        {isDraft && d.placeholders.length > 0 && (
-          <Badge variant="danger">⚠ Còn mục chưa điền</Badge>
-        )}
-        {!isDraft && hasNeedsLogin && (
-          <Badge variant="warn">🔑 Chờ đăng nhập</Badge>
-        )}
-        {!isDraft && !hasNeedsLogin && hasFailed && (
-          <Badge variant="danger">⚠ Đăng lỗi</Badge>
-        )}
-        {!isDraft && hasQueued && (
-          <Badge variant="accent">⏳ Đang đăng…</Badge>
-        )}
-      </p>
+      {/* Header & Status Badges */}
+      <QueueDraftHeader
+        draft={d}
+        isDraft={isDraft}
+        summaryParts={summaryParts}
+        hasNeedsLogin={hasNeedsLogin}
+        hasFailed={hasFailed}
+        hasQueued={hasQueued}
+      />
 
       {/* Feedback banner */}
       <FeedbackBanner feedback={feedback} />
@@ -343,84 +309,10 @@ export function QueueDraftCard({
           )}
 
           {/* Gói đăng */}
-          {!isDraft &&
-            (d.pack_text ? (
-              <div className="mt-3">
-                <button
-                  type="button"
-                  className={`${btnGhost} flex w-full items-center justify-between gap-2 text-left`}
-                  aria-expanded={packOpen}
-                  aria-label={`Gói đăng ${d.code}`}
-                  onClick={() => setPackOpen(!packOpen)}
-                >
-                  <span className="text-xs font-semibold text-[var(--ok)]">
-                    Gói đăng{d.packed_at ? ` · ${fmtDate(d.packed_at)}` : ""}
-                  </span>
-                  <span className="text-xs font-medium text-[var(--dim)]">
-                    {packOpen ? "Ẩn ▲" : "Xem ▼"}
-                  </span>
-                </button>
-                {packOpen && (
-                  <div className="mt-2">
-                    <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded-[var(--radius)] border border-[var(--ok)] p-3 font-mono text-xs leading-5">
-                      {d.pack_text}
-                    </pre>
-                    <div className="mt-2 flex flex-wrap items-center justify-end gap-2">
-                      <button
-                        className={btnGhost}
-                        onClick={handleCopyPack}
-                        aria-label={`Chép gói đăng ${d.code}`}
-                      >
-                        {copied ? "Đã chép ✓" : "Chép gói đăng"}
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="mt-3 rounded-[var(--radius)] border border-dashed border-[var(--border)] bg-[var(--surface-alt)] p-2.5 text-xs text-[var(--dim)]">
-                ℹ️ Bài này chưa có gói đăng — bạn chỉ cần chọn các đích đăng ở bên dưới rồi bấm nút <span className="font-semibold text-[var(--text)]">“Cập nhật gói đăng”</span> để tạo gói.
-              </div>
-            ))}
+          {!isDraft && <DraftPackViewer draft={d} />}
 
           {/* Lịch sử đăng bài (lần thử trước) */}
-          {latestPublishRecords.length > 0 && (
-            <div className="mt-3 rounded-[var(--radius)] border border-[var(--border)] p-3">
-              <p className="text-xs font-bold">Lịch sử đăng Bài</p>
-              <ul className="mt-1.5 space-y-1.5">
-                {latestPublishRecords.map((r) => {
-                  const badge = getPublishStatusBadge(r.status);
-                  return (
-                    <li key={r.id} className="text-xs leading-5">
-                      <span
-                        className={`mr-1.5 rounded-full px-2 py-0.5 font-semibold ${badge.badgeClass}`}
-                      >
-                        {badge.label}
-                      </span>
-                      <span className="font-semibold">
-                        {getKindLabel(r.target_kind)} {r.target_name}
-                      </span>{" "}
-                      <span className="text-[var(--dim)]">· {fmtDate(r.created_at)}</span>
-                      {r.message && (
-                        <span className="block text-[var(--dim)]">{r.message}</span>
-                      )}
-                      {r.post_url && (
-                        <a
-                          href={r.post_url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="font-semibold underline"
-                          aria-label={`Xem bài đã đăng của ${d.product_name} trên ${r.target_name}`}
-                        >
-                          Xem bài đã đăng
-                        </a>
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          )}
+          <PublishRecordsList draft={d} records={latestPublishRecords} />
 
           {/* Bộ chọn đích đăng */}
           <div className="mt-3">
@@ -447,97 +339,35 @@ export function QueueDraftCard({
       )}
 
       {/* Action controls */}
-      <div className="mt-3 flex flex-wrap gap-2">
-        {isDraft ? (
-          <button
-            className={`${btnPrimary} whitespace-nowrap`}
-            disabled={isApprovePending}
-            onClick={() => onApprove(d.id)}
-            aria-label={`Duyệt bài viết ${d.product_name}`}
-          >
-            {isApprovePending ? "Đang duyệt…" : "Duyệt bài viết"}
-          </button>
-        ) : (
-          <button
-            className={`${btnPrimary} whitespace-nowrap`}
-            disabled={isPublishPending}
-            aria-expanded={publishConfirm}
-            aria-label={`Đăng Bài ${d.product_name} lên các đích đã chọn`}
-            onClick={() => setPublishConfirm(!publishConfirm)}
-          >
-            Đăng Bài
-          </button>
-        )}
-
-        <button
-          type="button"
-          className={btnGhost}
-          aria-expanded={open}
-          aria-label={`${open ? "Thu gọn" : "Xem chi tiết"} bài viết ${d.product_name}`}
-          onClick={() => {
-            if (open && isEditing) setIsEditing(false);
-            setOpen(!open);
-          }}
-        >
-          {open ? "Thu gọn ▲" : "Xem chi tiết ▼"}
-        </button>
-
-        {open && isDraft && !isEditing && (
-          <>
-            <button
-              className={btnGhost}
-              disabled={!!rwJob}
-              onClick={() => onRewrite(d)}
-            >
-              {rwJob
-                ? rwJob.status === "running"
-                  ? "Đang viết lại…"
-                  : "Đang chờ viết lại…"
-                : "Viết lại chuyên nghiệp"}
-            </button>
-            <button
-              className={btnGhost}
-              onClick={() => setIsEditing(true)}
-            >
-              Sửa nội dung
-            </button>
-          </>
-        )}
-
-        {open && !isDraft && (
-          <>
-            <button
-              className={`${btnGhost} whitespace-nowrap`}
-              disabled={isPackPending}
-              aria-label={`Cập nhật gói đăng cho ${d.product_name} theo các đích đã chọn`}
-              onClick={() =>
-                onPack({
-                  id: d.id,
-                  group_ids: selectedGroups,
-                  page_ids: selectedPages,
-                  instagram_account_ids: selectedIg,
-                })
-              }
-            >
-              Cập nhật gói đăng
-            </button>
-            <button
-              className={`${btnGhost} whitespace-nowrap`}
-              onClick={onGoMedia}
-            >
-              Kiểm tra ảnh/video
-            </button>
-          </>
-        )}
-
-        <button
-          className={`${btnDanger} whitespace-nowrap`}
-          onClick={() => onDelete(d.id)}
-          aria-label={`Xóa bản nháp ${d.code}`}
-        >
-          Xóa
-        </button>
-      </div>
+      <QueueDraftActions
+        draft={d}
+        isDraft={isDraft}
+        isApprovePending={isApprovePending}
+        onApprove={onApprove}
+        publishConfirm={publishConfirm}
+        onTogglePublishConfirm={() => setPublishConfirm(!publishConfirm)}
+        isPublishPending={isPublishPending}
+        open={open}
+        onToggleOpen={() => {
+          if (open && isEditing) setIsEditing(false);
+          setOpen(!open);
+        }}
+        isEditing={isEditing}
+        onStartEditing={() => setIsEditing(true)}
+        rwJob={rwJob}
+        onRewrite={onRewrite}
+        isPackPending={isPackPending}
+        onPack={() =>
+          onPack({
+            id: d.id,
+            group_ids: selectedGroups,
+            page_ids: selectedPages,
+            instagram_account_ids: selectedIg,
+          })
+        }
+        onGoMedia={onGoMedia}
+        onDelete={onDelete}
+      />
 
       {/* Khối xác nhận Đăng bài */}
       {publishConfirm && (
