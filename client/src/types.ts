@@ -15,6 +15,22 @@ export type MediaItem = ApiResponse<typeof api, "listMedia">["media"][number];
 export type Metric = ApiResponse<typeof api, "listPostMetrics">["metrics"][number];
 export type Analytics = ApiResponse<typeof api, "getAnalytics">;
 export type ChannelInsight = Analytics["channels"][number];
+export type AnalyticsOverview = ApiResponse<typeof api, "getAnalyticsOverview">;
+export type GroupPerformance = ApiResponse<typeof api, "getGroupAnalytics">["groups"][number];
+export type ProductContentTree = ApiResponse<typeof api, "getProductContentTree">["products"][number];
+export type GroupHeatmap = ApiResponse<typeof api, "getGroupSlotHeatmap">;
+export type GroupHeatmapRow = GroupHeatmap["groups"][number];
+export type HeatmapCell = GroupHeatmapRow["cells"][number];
+export type EngagementDashboard = ApiResponse<typeof api, "getEngagementDashboard">;
+export type DashboardKpis = EngagementDashboard["kpis"];
+export type DashboardTrend = EngagementDashboard["trend"];
+export type DashboardTopGroup = EngagementDashboard["topGroups"]["groups"][number];
+export type DashboardTopContent = EngagementDashboard["topContent"]["content"][number];
+export type DashboardHeatmapRow = EngagementDashboard["bestPostingTime"]["rows"][number];
+export type DashboardRecommendation = EngagementDashboard["recommendations"]["items"][number];
+export type DashboardDataHealth = EngagementDashboard["dataHealth"];
+export type DashboardFilters = EngagementDashboard["appliedFilters"];
+
 
 export type Tab =
   | "overview"

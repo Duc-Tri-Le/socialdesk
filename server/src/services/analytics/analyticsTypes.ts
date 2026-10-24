@@ -118,6 +118,8 @@ export const metricOut = z.object({
   score: z.number(),
   notes: z.string(),
   post_url: z.string().default(""),
+  post_status: z.enum(["active", "pending_approval", "removed"]).default("active"),
+  scanned_at: z.string().nullable().default(null),
 });
 
 export type MetricRow = typeof schema.postMetrics.$inferSelect;
@@ -131,6 +133,13 @@ export function toMetricOut(
   if (!url && r.notes) {
     url = extractValidUrl(r.notes);
   }
+  const rawStatus = (r as any).postStatus || "active";
+  const validStatus = (["active", "pending_approval", "removed"] as const).includes(rawStatus)
+    ? (rawStatus as "active" | "pending_approval" | "removed")
+    : "active";
+
+  const scannedAtIso = r.scannedAt ? r.scannedAt.toISOString() : null;
+
   return {
     id: r.id,
     draft_id: r.draftId,
@@ -152,8 +161,114 @@ export function toMetricOut(
     score: engagementScore(r),
     notes: r.notes,
     post_url: url || "",
+    post_status: validStatus,
+    scanned_at: scannedAtIso,
   };
 }
+
+export const heatmapCellOut = z.object({
+  slot: z.string(),
+  posts_count: z.number(),
+  raw_avg_score: z.number(),
+  normalized_avg_score: z.number(),
+  confidence: z.enum(["none", "low", "medium", "high"]),
+  last_scanned_at: z.string().nullable(),
+  avg_age_hours: z.number(),
+  has_orders: z.boolean(),
+  inquiries: z.number(),
+  orders: z.number(),
+  is_winner: z.boolean(),
+});
+
+export type HeatmapCell = z.infer<typeof heatmapCellOut>;
+
+export const groupHeatmapRowOut = z.object({
+  group_name: z.string(),
+  total_posts: z.number(),
+  cells: z.array(heatmapCellOut),
+  best_reliable_slot: z.string(),
+});
+
+export type GroupHeatmapRow = z.infer<typeof groupHeatmapRowOut>;
+
+export const groupHeatmapOut = z.object({
+  groups: z.array(groupHeatmapRowOut),
+  slots: z.array(z.string()),
+  overall_reliable_best_slot: z.string(),
+  timezone: z.string(),
+});
+
+export type GroupHeatmapData = z.infer<typeof groupHeatmapOut>;
+
+export const groupPerformanceOut = z.object({
+  group_name: z.string(),
+  total_posts: z.number(),
+  active_posts: z.number(),
+  pending_posts: z.number(),
+  removed_posts: z.number(),
+  total_likes: z.number(),
+  total_comments: z.number(),
+  total_shares: z.number(),
+  total_inquiries: z.number(),
+  total_orders: z.number(),
+  total_reach: z.number(),
+  avg_score: z.number(),
+  approval_rate: z.number(),
+});
+
+export type GroupPerformanceData = z.infer<typeof groupPerformanceOut>;
+
+export const contentDraftOut = z.object({
+  draft_id: z.number(),
+  stt: z.string(),
+  angle: z.string(),
+  caption: z.string(),
+  drive_images: z.array(z.string()),
+  posts_count: z.number(),
+  total_likes: z.number(),
+  total_comments: z.number(),
+  total_shares: z.number(),
+  total_inquiries: z.number(),
+  total_orders: z.number(),
+  total_reach: z.number(),
+  total_score: z.number(),
+  posts: z.array(metricOut),
+});
+
+export type ContentDraftData = z.infer<typeof contentDraftOut>;
+
+export const productTreeOut = z.object({
+  product_name: z.string(),
+  drafts_count: z.number(),
+  total_posts: z.number(),
+  total_score: z.number(),
+  total_orders: z.number(),
+  total_inquiries: z.number(),
+  drafts: z.array(contentDraftOut),
+});
+
+export type ProductTreeData = z.infer<typeof productTreeOut>;
+
+export const analyticsOverviewOut = z.object({
+  total_products: z.number(),
+  total_drafts: z.number(),
+  total_posts: z.number(),
+  total_reach: z.number(),
+  total_likes: z.number(),
+  total_comments: z.number(),
+  total_shares: z.number(),
+  total_inquiries: z.number(),
+  total_orders: z.number(),
+  total_score: z.number(),
+  active_posts: z.number(),
+  pending_posts: z.number(),
+  removed_posts: z.number(),
+  group_posts: z.number(),
+  page_posts: z.number(),
+  instagram_posts: z.number(),
+});
+
+export type AnalyticsOverviewData = z.infer<typeof analyticsOverviewOut>;
 
 export const slotInsightOut = z.object({
   slot: z.string(),

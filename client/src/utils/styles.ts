@@ -7,3 +7,9 @@ export const btnGhost =
   "rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm font-medium text-[var(--text)] disabled:opacity-50";
 export const btnDanger =
   "rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm font-medium text-[var(--danger)] disabled:opacity-50";
+export const btnOutline =
+  "rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm font-semibold text-[var(--ink)] hover:border-[var(--accent)] disabled:opacity-50 transition-colors";
+export const cardCls = "rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)]";
+export const tableThCls = "px-4 py-3 font-semibold text-[var(--dim)]";
+export const tableTdCls = "px-4 py-3 text-[var(--ink)]";
+

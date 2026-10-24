@@ -1,4 +1,23 @@
-import type { Metric, ChannelInsight, Analytics } from "../../types";
+import type {
+  Metric,
+  ChannelInsight,
+  Analytics,
+  AnalyticsOverview,
+  GroupPerformance,
+  ProductContentTree,
+  GroupHeatmap,
+  GroupHeatmapRow,
+  HeatmapCell,
+  EngagementDashboard,
+  DashboardKpis,
+  DashboardTrend,
+  DashboardTopGroup,
+  DashboardTopContent,
+  DashboardHeatmapRow,
+  DashboardRecommendation,
+  DashboardDataHealth,
+  DashboardFilters,
+} from "../../types";
 
 export const SLOT_LABELS = [
   "06:00–09:00",
@@ -14,6 +33,16 @@ export type SlotLabel = (typeof SLOT_LABELS)[number];
 
 export type ChannelType = "group" | "page" | "instagram";
 
+export type PostStatus = "active" | "pending_approval" | "removed";
+
+export type AnalyticsSubTab =
+  | "overview"
+  | "groups"
+  | "content"
+  | "posts"
+  | "slots"
+  | "sync_scan";
+
 export interface QuickEditSalesData {
   id: number;
   inquiries: number;
@@ -28,4 +57,25 @@ export interface AnalyticsFeedback {
   type: "success" | "error" | "info";
 }
 
-export type { Metric, ChannelInsight, Analytics };
+export type ContentDraft = ProductContentTree["drafts"][number];
+
+export type {
+  Metric,
+  ChannelInsight,
+  Analytics,
+  AnalyticsOverview,
+  GroupPerformance,
+  ProductContentTree,
+  GroupHeatmap,
+  GroupHeatmapRow,
+  HeatmapCell,
+  EngagementDashboard,
+  DashboardKpis,
+  DashboardTrend,
+  DashboardTopGroup,
+  DashboardTopContent,
+  DashboardHeatmapRow,
+  DashboardRecommendation,
+  DashboardDataHealth,
+  DashboardFilters,
+};

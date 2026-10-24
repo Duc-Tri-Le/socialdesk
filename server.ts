@@ -25,6 +25,34 @@ try {
 } catch {
   // Cột extension_code đã tồn tại
 }
+try {
+  sqlite.run("ALTER TABLE post_metrics ADD COLUMN post_status TEXT NOT NULL DEFAULT 'active';");
+} catch {
+  // Cột post_status đã tồn tại
+}
+try {
+  sqlite.run("ALTER TABLE post_metrics ADD COLUMN scanned_at INTEGER;");
+} catch {
+  // Cột scanned_at đã tồn tại
+}
+try {
+  sqlite.run(`CREATE TABLE IF NOT EXISTS post_metric_snapshots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+    posting_id INTEGER NOT NULL,
+    captured_at INTEGER NOT NULL,
+    reactions INTEGER DEFAULT 0 NOT NULL,
+    comments INTEGER DEFAULT 0 NOT NULL,
+    shares INTEGER DEFAULT 0 NOT NULL,
+    reach INTEGER,
+    source TEXT DEFAULT 'extension_dom' NOT NULL,
+    data_quality TEXT DEFAULT 'full' NOT NULL,
+    created_at INTEGER NOT NULL
+  );`);
+  sqlite.run(`CREATE INDEX IF NOT EXISTS idx_snapshots_posting_id ON post_metric_snapshots(posting_id);`);
+  sqlite.run(`CREATE INDEX IF NOT EXISTS idx_snapshots_captured_at ON post_metric_snapshots(captured_at);`);
+} catch {
+  // Bảng post_metric_snapshots đã tồn tại
+}
 const db = drizzle(sqlite, { schema });
 
 registerGlobalExtensionHelpers();

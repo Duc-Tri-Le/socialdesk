@@ -57,6 +57,7 @@ export function prepareSyncMetricsBatch(
       inquiries: 0,
       orders: 0,
       notes: extractValidUrl(rec.postUrl) || rec.postUrl || "",
+      postStatus: "active",
     });
 
     existingKeys.add(key);

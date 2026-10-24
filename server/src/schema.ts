@@ -252,6 +252,34 @@ export const postMetrics = sqliteTable("post_metrics", {
   inquiries: integer("inquiries").notNull().default(0),
   orders: integer("orders").notNull().default(0),
   notes: text("notes").notNull().default(""),
+  postStatus: text("post_status", { enum: ["active", "pending_approval", "removed"] })
+    .notNull()
+    .default("active"),
+  scannedAt: integer("scanned_at", { mode: "timestamp_ms" }),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
+// Lịch sử snapshot chỉ số theo thời gian (Metric Snapshot):
+// Lưu lại từng lần đo lường thực tế để phân tích tăng trưởng tương tác
+// (Engagement Growth) giữa các lần quét, không ghi đè dữ liệu lịch sử.
+export const postMetricSnapshots = sqliteTable("post_metric_snapshots", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  postingId: integer("posting_id").notNull(),
+  capturedAt: integer("captured_at", { mode: "timestamp_ms" })
+    .notNull()
+    .$defaultFn(() => new Date()),
+  reactions: integer("reactions").notNull().default(0),
+  comments: integer("comments").notNull().default(0),
+  shares: integer("shares").notNull().default(0),
+  reach: integer("reach"),
+  source: text("source", { enum: ["extension_dom", "admin_insights", "manual"] })
+    .notNull()
+    .default("extension_dom"),
+  dataQuality: text("data_quality", { enum: ["full", "partial", "failed"] })
+    .notNull()
+    .default("full"),
   createdAt: integer("created_at", { mode: "timestamp_ms" })
     .notNull()
     .$defaultFn(() => new Date()),
