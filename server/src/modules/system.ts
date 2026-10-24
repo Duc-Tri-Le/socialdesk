@@ -3,6 +3,7 @@ import { asc, eq } from "drizzle-orm";
 import * as schema from "../schema";
 import {
   getSheetSettings,
+  getSetting,
   MAX_POSTS_PER_DAY,
   MIN_INTERVAL_MINUTES,
 } from "../services/settings";
@@ -218,8 +219,14 @@ export const systemActions = {
       const packedToday = packed.filter(
         (d) => d.packedAt && vnDateKey(d.packedAt) === today,
       ).length;
+      const accountsOut = await Promise.all(
+        accs.map(async (a) => {
+          const savedStatus = await getSetting(db, `account_session_${a.id}`);
+          return toAccountOut(a, savedStatus);
+        }),
+      );
       return {
-        accounts: accs.map(toAccountOut),
+        accounts: accountsOut,
         pages: pgs.map((p) =>
           toPageOut(p, accountNameById.get(p.accountId) ?? ""),
         ),
@@ -238,9 +245,7 @@ export const systemActions = {
         },
         counts: {
           accounts_total: accs.length,
-          accounts_selected: accs.filter(
-            (a) => a.linked === 1 && a.selected === 1,
-          ).length,
+          accounts_selected: accs.filter((a) => a.selected === 1).length,
           pages_total: pgs.length,
           pages_selected: pgs.filter((p) => p.selected === 1).length,
           products: prods.length,

@@ -1,9 +1,22 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api";
 import type { Account, Page } from "../../types";
-import { btnPrimary, inputCls, labelCls } from "../../utils/styles";
-import { AccountItemCard } from "../accounts/AccountItemCard";
+import {
+  FeedbackBanner,
+  GridIcon,
+  SearchInput,
+  TableIcon,
+} from "../ui";
+import {
+  AccountAddForm,
+  AccountPlatformColumn,
+  AccountTableView,
+  ExtensionStatusCard,
+  filterAndSortAccounts,
+  getSessionStatus,
+  isAccountOnline,
+} from "../accounts";
 
 export function AccountsSection({
   accounts,
@@ -14,24 +27,80 @@ export function AccountsSection({
 }) {
   const queryClient = useQueryClient();
   const [msg, setMsg] = useState("");
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [newAccUrl, setNewAccUrl] = useState("");
-  const [newAccCode, setNewAccCode] = useState("");
+
+  // Chế độ xem: Dạng thẻ 2 cột (cards) hoặc Dạng bảng desktop (table)
+  const [viewMode, setViewMode] = useState<"cards" | "table">("cards");
+
+  // Kiểu hiển thị trong dạng thẻ: Phân trang (paged) hoặc Danh sách cuộn (scroll)
+  const [scrollLayout, setScrollLayout] = useState<"paged" | "scroll">("paged");
+
+  // Trạng thái mở/đóng form thêm tài khoản
+  const [isAddFormOpen, setIsAddFormOpen] = useState(false);
+
+  // Bộ lọc cho chế độ bảng desktop
+  const [tablePlatformFilter, setTablePlatformFilter] = useState<
+    "all" | "Facebook" | "Instagram"
+  >("all");
+  const [tableSearch, setTableSearch] = useState("");
 
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: ["overview"] });
     queryClient.invalidateQueries({ queryKey: ["accounts"] });
+    queryClient.invalidateQueries({ queryKey: ["pages"] });
   };
 
+  // Polling danh sách mã Chrome Extension đang online qua WebSocket
   const connectedExtQ = useQuery({
     queryKey: ["connectedExtensions"],
     queryFn: () => api.getConnectedExtensions({}),
     refetchInterval: 3000,
   });
 
-  const onlineCodes = (connectedExtQ.data?.online_codes || []).map((c: string) =>
-    c.toUpperCase(),
-  );
+  const onlineCodes = useMemo(() => {
+    return (connectedExtQ.data?.online_codes || []).map((c: string) =>
+      c.toUpperCase(),
+    );
+  }, [connectedExtQ.data?.online_codes]);
+
+  // Mutations
+  const addAccount = useMutation({
+    mutationFn: (args: {
+      platform: "Facebook" | "Instagram";
+      name: string;
+      profile_url: string;
+      extension_code: string;
+    }) =>
+      api.addAccount({
+        platform: args.platform,
+        name: args.name,
+        profile_url: args.profile_url,
+        extension_code: args.extension_code,
+        handle:
+          args.platform === "Instagram"
+            ? args.name
+              ? `@${args.name.replace(/^@/, "")}`
+              : "Tài khoản Instagram"
+            : "",
+        linked: true,
+      }),
+    onSuccess: (res) => {
+      setMsg(res.message);
+      if (res.ok) {
+        setIsAddFormOpen(false);
+      }
+      refresh();
+      connectedExtQ.refetch();
+    },
+  });
+
+  const select = useMutation({
+    mutationFn: (args: { id: number; selected: boolean }) =>
+      api.setAccountSelected(args),
+    onSuccess: (res) => {
+      setMsg(res.message);
+      refresh();
+    },
+  });
 
   const saveExtensionCode = useMutation({
     mutationFn: (args: { id: number; extension_code: string }) =>
@@ -43,31 +112,11 @@ export function AccountsSection({
     },
   });
 
-  const addAccount = useMutation({
-    mutationFn: () =>
-      api.addAccount({
-        platform: "Facebook",
-        name: "",
-        profile_url: newAccUrl,
-        extension_code: newAccCode,
-        handle: "Tài khoản Chrome Extension",
-        linked: true,
-      }),
-    onSuccess: (res) => {
-      setMsg(res.message);
-      if (res.ok) {
-        setNewAccUrl("");
-        setNewAccCode("");
-        setShowAddForm(false);
-      }
-      refresh();
-      connectedExtQ.refetch();
-    },
-  });
-
-  const select = useMutation({
-    mutationFn: (args: { id: number; selected: boolean }) =>
-      api.setAccountSelected(args),
+  const setSessionStatus = useMutation({
+    mutationFn: (args: {
+      id: number;
+      status: "logged_in" | "expired" | "checkpoint";
+    }) => api.setAccountSessionStatus(args),
     onSuccess: (res) => {
       setMsg(res.message);
       refresh();
@@ -85,7 +134,10 @@ export function AccountsSection({
 
   const del = useMutation({
     mutationFn: (id: number) => api.deleteAccount({ id }),
-    onSuccess: refresh,
+    onSuccess: () => {
+      setMsg("Đã xóa tài khoản.");
+      refresh();
+    },
   });
 
   const saveUrl = useMutation({
@@ -106,132 +158,260 @@ export function AccountsSection({
     },
   });
 
-  const loggedIn = accounts.filter((a) => a.linked && a.selected);
-  const linkedNotUsed = accounts.filter((a) => a.linked && !a.selected);
-  const notLinked = accounts.filter((a) => !a.linked);
+  const handleGlobalRetry = () => {
+    connectedExtQ.refetch();
+    setMsg("Đang kiểm tra lại tín hiệu từ toàn bộ Chrome Extension...");
+  };
+
+  // Phân tách tài khoản theo nền tảng
+  const fbAccounts = useMemo(
+    () => accounts.filter((a) => a.platform.toLowerCase() === "facebook"),
+    [accounts],
+  );
+  const instaAccounts = useMemo(
+    () => accounts.filter((a) => a.platform.toLowerCase() === "instagram"),
+    [accounts],
+  );
+
+  // Thống kê tổng hợp (chỉ tính lại khi danh sách accounts hoặc onlineCodes đổi)
+  const summaryStats = useMemo(() => {
+    let totalLoggedIn = 0;
+    let totalExpired = 0;
+    let totalCheckpoint = 0;
+    let totalOnline = 0;
+    let totalSelected = 0;
+
+    for (const a of accounts) {
+      if (a.selected) totalSelected++;
+      if (isAccountOnline(a, onlineCodes)) totalOnline++;
+      const session = getSessionStatus(a);
+      if (session === "logged_in") totalLoggedIn++;
+      else if (session === "expired") totalExpired++;
+      else if (session === "checkpoint") totalCheckpoint++;
+    }
+
+    return {
+      totalLoggedIn,
+      totalExpired,
+      totalCheckpoint,
+      totalOnline,
+      totalSelected,
+    };
+  }, [accounts, onlineCodes]);
+
+  // Lọc tài khoản cho chế độ Bảng Desktop
+  const tableAccounts = useMemo(() => {
+    return filterAndSortAccounts(accounts, {
+      search: tableSearch,
+      sort: "selected_first",
+      onlineCodes,
+      pages,
+      includePlatformInSearch: true,
+      filter: "all",
+    }).filter((a) => {
+      if (tablePlatformFilter === "all") return true;
+      return a.platform.toLowerCase() === tablePlatformFilter.toLowerCase();
+    });
+  }, [accounts, tableSearch, tablePlatformFilter, onlineCodes, pages]);
 
   return (
-    <section aria-label="Danh sách tài khoản">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-bold">Danh sách tài khoản</h2>
-          <p className="mt-1 text-xs text-[var(--dim)]">
-            {loggedIn.length} nick đang đăng nhập
-            {linkedNotUsed.length > 0 &&
-              ` · ${linkedNotUsed.length} nick đã liên kết nhưng chưa dùng để đăng`}
-            {notLinked.length > 0 && ` · ${notLinked.length} nick chưa liên kết`}
-          </p>
-        </div>
-        <button
-          onClick={() => setShowAddForm(!showAddForm)}
-          className="rounded-full bg-sky-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-sky-500 transition-colors"
-        >
-          {showAddForm ? "✕ Đóng form" : "+ Thêm tài khoản Facebook / Chrome"}
-        </button>
-      </div>
-
-      {/* Form kết nối Chrome Extension */}
-      {showAddForm && (
-        <div className="mt-4 rounded-[var(--radius)] border border-sky-500/40 bg-[var(--surface)] p-4 shadow-sm animate-in fade-in duration-200">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-bold text-sky-400">
-              Kết nối tài khoản Facebook qua Chrome Extension
-            </h3>
-            <button
-              onClick={() => setShowAddForm(false)}
-              className="text-xs text-[var(--dim)] hover:text-[var(--text)]"
-            >
-              ✕ Đóng
-            </button>
-          </div>
-          <p className="mt-0.5 text-xs text-[var(--dim)]">
-            Mở extension trên cửa sổ Chrome của nick Facebook &rarr; sao chép mã (ví dụ: SD-8492) dán vào đây. <strong>Tên nick sẽ được tự động nhận diện từ tài khoản Facebook</strong>, bạn không cần phải nhập tên.
-          </p>
-
-          <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div>
-              <label className={labelCls}>Mã Chrome Extension (*):</label>
-              <input
-                value={newAccCode}
-                onChange={(e) => setNewAccCode(e.target.value.toUpperCase())}
-                placeholder="Ví dụ: SD-8492, CHROME-1..."
-                className={`${inputCls} font-mono uppercase font-bold text-sky-400`}
-              />
-              <p className="mt-1 text-[11px] text-[var(--dim)]">
-                Mỗi nick Facebook dùng 1 profile Chrome riêng biệt có mã kết nối này.
-              </p>
-            </div>
-            <div>
-              <label className={labelCls}>Link trang cá nhân (tùy chọn):</label>
-              <input
-                value={newAccUrl}
-                onChange={(e) => setNewAccUrl(e.target.value)}
-                placeholder="https://www.facebook.com/..."
-                className={inputCls}
-              />
-            </div>
-          </div>
-
-          <div className="mt-4 flex items-center gap-2">
-            <button
-              onClick={() => addAccount.mutate()}
-              disabled={!newAccCode.trim() || addAccount.isPending}
-              className={btnPrimary}
-            >
-              {addAccount.isPending ? "Đang kết nối..." : "Kết nối Chrome"}
-            </button>
-            <button
-              onClick={() => setShowAddForm(false)}
-              className="rounded-full border border-[var(--border)] px-4 py-2 text-xs font-semibold text-[var(--dim)] hover:text-[var(--text)]"
-            >
-              Hủy
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Box trạng thái Chrome Extension */}
-      <div className="mt-3 rounded-[var(--radius)] border border-sky-500/30 bg-sky-500/10 p-3.5 text-xs text-[var(--text)]">
-        <div className="flex flex-wrap items-center justify-between gap-2 font-bold text-sky-400">
-          <span className="flex items-center gap-1.5">
-            <span className="text-base">🚀</span> Đăng bài đa tài khoản qua Chrome Extension
-          </span>
-          <span className="rounded-full bg-sky-500/20 px-2.5 py-0.5 text-[11px] font-semibold text-sky-300">
-            {onlineCodes.length > 0
-              ? `🟢 ${onlineCodes.length} Chrome đang kết nối`
-              : "⚪ Chưa có Chrome nào kết nối"}
-          </span>
-        </div>
-        <p className="mt-1 text-[var(--dim)]">
-          Mỗi tài khoản Facebook đăng nhập ở 1 cửa sổ/profile Chrome riêng biệt. Hãy mở Chrome của tài khoản đó &rarr; bật extension &rarr; lấy mã trong popup và dán vào ô <strong>Mã Chrome</strong> của tài khoản tương ứng dưới đây. Khi bấm <strong>Đăng bài</strong>, hệ thống sẽ tự động kích hoạt cửa sổ Chrome đó để đăng!
-        </p>
-        {onlineCodes.length > 0 && (
-          <div className="mt-2.5 flex flex-wrap items-center gap-1.5 border-t border-sky-500/20 pt-2">
-            <span className="text-[11px] font-medium text-emerald-400">Các mã Chrome đang sẵn sàng:</span>
-            {onlineCodes.map((code) => (
-              <span
-                key={code}
-                className="rounded-md bg-emerald-500/20 px-2 py-0.5 font-mono text-[11px] font-bold text-emerald-300"
-              >
-                {code}
+    <div className="space-y-6">
+      {/* ================= HEADER TỔNG THỂ (GỌN 2 HÀNG RÕ RÀNG) ================= */}
+      <section aria-label="Danh sách tài khoản">
+        <header className="flex flex-col gap-2">
+          {/* Hàng 1: Tiêu đề + Tổng số tài khoản (trái) và Chuyển chế độ xem + Nút thêm mới (phải) */}
+          <div className="flex flex-wrap items-center justify-between gap-2.5">
+            <div className="flex items-center gap-2">
+              <h2 className="text-base sm:text-lg font-bold text-[var(--text)]">
+                Quản lý tài khoản mạng xã hội
+              </h2>
+              <span className="inline-flex items-center rounded-md bg-[var(--surface-alt)] px-2 py-0.5 text-xs font-semibold text-[var(--dim)] border border-[var(--border)]">
+                {accounts.length} nick ({fbAccounts.length} FB · {instaAccounts.length} IG)
               </span>
-            ))}
-          </div>
-        )}
-      </div>
+            </div>
 
-      {/* Danh sách các tài khoản */}
-      <ul className="mt-3 space-y-3">
-        {accounts.map((a) => (
-          <AccountItemCard
-            key={a.id}
-            account={a}
+            <div className="flex items-center gap-2">
+              {/* Bộ chuyển đổi chế độ xem: Dạng Thẻ vs Dạng Bảng */}
+              <div className="inline-flex items-center rounded-lg border border-[var(--border)] bg-[var(--surface)] p-0.5 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setViewMode("cards")}
+                  className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 font-semibold transition-colors ${
+                    viewMode === "cards"
+                      ? "bg-[var(--accent)] text-white shadow-sm"
+                      : "text-[var(--dim)] hover:text-[var(--text)]"
+                  }`}
+                  title="Xem dạng thẻ 2 cột"
+                >
+                  <GridIcon className="h-3.5 w-3.5" />
+                  <span>Dạng thẻ</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode("table")}
+                  className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 font-semibold transition-colors ${
+                    viewMode === "table"
+                      ? "bg-[var(--accent)] text-white shadow-sm"
+                      : "text-[var(--dim)] hover:text-[var(--text)]"
+                  }`}
+                  title="Xem dạng bảng dữ liệu desktop"
+                >
+                  <TableIcon className="h-3.5 w-3.5" />
+                  <span>Bảng desktop</span>
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsAddFormOpen(!isAddFormOpen)}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--accent)] px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:opacity-90 transition-opacity"
+              >
+                {isAddFormOpen ? "✕ Đóng form" : "+ Thêm tài khoản mới"}
+              </button>
+            </div>
+          </div>
+
+          {/* Hàng 2: Thống kê trạng thái gom gọn trên 1 hàng */}
+          <div className="flex flex-wrap items-center gap-1.5 text-xs">
+            <span className="inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--surface-alt)]/60 px-2.5 py-1 text-[var(--dim)]">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+              Phiên: <strong className="text-emerald-400 font-semibold">{summaryStats.totalLoggedIn}</strong> Đã đăng nhập
+              {summaryStats.totalExpired > 0 && <span className="text-zinc-400">· {summaryStats.totalExpired} Hết phiên</span>}
+              {summaryStats.totalCheckpoint > 0 && <span className="text-amber-400 font-semibold">· {summaryStats.totalCheckpoint} Cần xác minh</span>}
+            </span>
+            <span className="inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--surface-alt)]/60 px-2.5 py-1 text-[var(--dim)]">
+              <span className="h-1.5 w-1.5 rounded-full bg-sky-400" />
+              Extension: <strong className="text-sky-400 font-semibold">{summaryStats.totalOnline}</strong> Online
+              {accounts.length - summaryStats.totalOnline > 0 && <span className="text-zinc-400">· {accounts.length - summaryStats.totalOnline} Offline</span>}
+            </span>
+            <span className="inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--surface-alt)]/60 px-2.5 py-1 text-[var(--dim)]">
+              <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+              Đang dùng: <strong className="text-amber-300 font-semibold">{summaryStats.totalSelected}</strong> nick
+            </span>
+            <span className="inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--surface-alt)]/60 px-2.5 py-1 text-[var(--dim)]">
+              <span className="h-1.5 w-1.5 rounded-full bg-indigo-400" />
+              <strong className="text-indigo-300 font-semibold">{pages.length}</strong> Fanpage
+            </span>
+          </div>
+        </header>
+
+        {/* Thông báo phản hồi */}
+        <FeedbackBanner
+          message={msg}
+          onDismiss={() => setMsg("")}
+          className="mt-3"
+        />
+
+        {/* Form thêm tài khoản mới */}
+        <AccountAddForm
+          isOpen={isAddFormOpen}
+          onToggle={setIsAddFormOpen}
+          onSubmit={(args) => addAccount.mutate(args)}
+          isPending={addAccount.isPending}
+        />
+
+        {/* Trạng thái kết nối Chrome Extension + nút Thử kết nối lại toàn bộ */}
+        <ExtensionStatusCard
+          onlineCodes={onlineCodes}
+          isFetching={connectedExtQ.isFetching}
+          onRetryAll={handleGlobalRetry}
+        />
+      </section>
+
+      {/* ================= CHẾ ĐỘ 1: BẢNG DESKTOP KHI SỐ LƯỢNG TÀI KHOẢN LỚN ================= */}
+      {viewMode === "table" ? (
+        <section
+          aria-label="Bảng quản lý tài khoản"
+          className="space-y-3 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm"
+        >
+          {/* Toolbar lọc và tìm kiếm cho bảng */}
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] pb-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-bold text-[var(--text)]">Lọc bảng:</span>
+              <button
+                type="button"
+                onClick={() => setTablePlatformFilter("all")}
+                className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
+                  tablePlatformFilter === "all"
+                    ? "bg-[var(--accent)] text-white"
+                    : "bg-[var(--surface-alt)] text-[var(--dim)] hover:text-[var(--text)]"
+                }`}
+              >
+                Tất cả ({accounts.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setTablePlatformFilter("Facebook")}
+                className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
+                  tablePlatformFilter === "Facebook"
+                    ? "bg-blue-600 text-white"
+                    : "bg-[var(--surface-alt)] text-[var(--dim)] hover:text-[var(--text)]"
+                }`}
+              >
+                Facebook ({fbAccounts.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setTablePlatformFilter("Instagram")}
+                className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
+                  tablePlatformFilter === "Instagram"
+                    ? "bg-pink-600 text-white"
+                    : "bg-[var(--surface-alt)] text-[var(--dim)] hover:text-[var(--text)]"
+                }`}
+              >
+                Instagram ({instaAccounts.length})
+              </button>
+            </div>
+
+            <div className="w-full sm:w-72">
+              <SearchInput
+                id="search-table-accounts"
+                value={tableSearch}
+                onChange={setTableSearch}
+                placeholder="Tìm nick, nền tảng, mã Chrome, Page..."
+                ariaLabel="Tìm kiếm trong bảng tài khoản"
+                compact
+              />
+            </div>
+          </div>
+
+          <AccountTableView
+            accounts={tableAccounts}
             pages={pages}
             onlineCodes={onlineCodes}
-            onSaveExtensionCode={(args) => saveExtensionCode.mutate(args)}
-            isSaveExtensionCodePending={saveExtensionCode.isPending}
             onSelect={(args) => select.mutate(args)}
             isSelectPending={select.isPending}
+            onSetSessionStatus={(args) => setSessionStatus.mutate(args)}
+            onLink={(args) => link.mutate(args)}
+            isLinkPending={link.isPending}
+            onSaveExtensionCode={(args) => saveExtensionCode.mutate(args)}
+            isSaveExtensionCodePending={saveExtensionCode.isPending}
+            onSaveName={(args) => saveName.mutate(args)}
+            isSaveNamePending={saveName.isPending}
+            onSaveUrl={(args) => saveUrl.mutate(args)}
+            isSaveUrlPending={saveUrl.isPending}
+            onDelete={(id) => del.mutate(id)}
+            onMsg={setMsg}
+          />
+        </section>
+      ) : (
+        /* ================= CHẾ ĐỘ 2: BỐ CỤC 2 CỘT DẠNG THẺ (FACEBOOK & INSTAGRAM) ================= */
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+          {/* CỘT 1: TÀI KHOẢN FACEBOOK */}
+          <AccountPlatformColumn
+            platform="Facebook"
+            accounts={fbAccounts}
+            pages={pages}
+            onlineCodes={onlineCodes}
+            scrollLayout={scrollLayout}
+            onToggleScrollLayout={() =>
+              setScrollLayout(scrollLayout === "scroll" ? "paged" : "scroll")
+            }
+            onSelect={(args) => select.mutate(args)}
+            isSelectPending={select.isPending}
+            onSaveExtensionCode={(args) => saveExtensionCode.mutate(args)}
+            isSaveExtensionCodePending={saveExtensionCode.isPending}
+            onSetSessionStatus={(args) => setSessionStatus.mutate(args)}
             onLink={(args) => link.mutate(args)}
             isLinkPending={link.isPending}
             onDelete={(id) => del.mutate(id)}
@@ -239,30 +419,39 @@ export function AccountsSection({
             isSaveUrlPending={saveUrl.isPending}
             onSaveName={(args) => saveName.mutate(args)}
             isSaveNamePending={saveName.isPending}
+            onRetryConnection={() => connectedExtQ.refetch()}
             onMsg={setMsg}
+            onOpenAddForm={() => setIsAddFormOpen(true)}
           />
-        ))}
-      </ul>
 
-      {accounts.length === 0 && (
-        <div className="mt-3 rounded-[var(--radius)] border border-dashed border-[var(--border)] p-6 text-center">
-          <p className="text-sm font-semibold text-[var(--dim)]">
-            Chưa có tài khoản nào.
-          </p>
-          <button
-            onClick={() => setShowAddForm(true)}
-            className="mt-3 rounded-full bg-sky-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-sky-500"
-          >
-            + Thêm tài khoản Facebook / Chrome đầu tiên
-          </button>
+          {/* CỘT 2: TÀI KHOẢN INSTAGRAM */}
+          <AccountPlatformColumn
+            platform="Instagram"
+            accounts={instaAccounts}
+            pages={pages}
+            onlineCodes={onlineCodes}
+            scrollLayout={scrollLayout}
+            onToggleScrollLayout={() =>
+              setScrollLayout(scrollLayout === "scroll" ? "paged" : "scroll")
+            }
+            onSelect={(args) => select.mutate(args)}
+            isSelectPending={select.isPending}
+            onSaveExtensionCode={(args) => saveExtensionCode.mutate(args)}
+            isSaveExtensionCodePending={saveExtensionCode.isPending}
+            onSetSessionStatus={(args) => setSessionStatus.mutate(args)}
+            onLink={(args) => link.mutate(args)}
+            isLinkPending={link.isPending}
+            onDelete={(id) => del.mutate(id)}
+            onSaveUrl={(args) => saveUrl.mutate(args)}
+            isSaveUrlPending={saveUrl.isPending}
+            onSaveName={(args) => saveName.mutate(args)}
+            isSaveNamePending={saveName.isPending}
+            onRetryConnection={() => connectedExtQ.refetch()}
+            onMsg={setMsg}
+            onOpenAddForm={() => setIsAddFormOpen(true)}
+          />
         </div>
       )}
-
-      {msg && (
-        <p className="mt-3 rounded-md bg-[var(--surface-alt)] px-3 py-2 text-sm font-medium" role="status">
-          {msg}
-        </p>
-      )}
-    </section>
+    </div>
   );
 }

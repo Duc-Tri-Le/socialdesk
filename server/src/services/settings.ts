@@ -1,5 +1,5 @@
 import type { Ctx } from "@hatch/space-sdk";
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, like } from "drizzle-orm";
 import * as schema from "../schema";
 
 export const MAX_POSTS_PER_DAY = 3;
@@ -18,6 +18,24 @@ export async function getSetting(db: Db, key: string): Promise<string> {
   return row?.value ?? "";
 }
 
+/**
+ * Lấy hàng loạt setting theo tiền tố key (giải quyết N+1 query)
+ */
+export async function getSettingsByPrefix(
+  db: Db,
+  prefix: string,
+): Promise<Map<string, string>> {
+  const rows = await db
+    .select()
+    .from(schema.appSettings)
+    .where(like(schema.appSettings.key, `${prefix}%`));
+  const map = new Map<string, string>();
+  for (const r of rows) {
+    map.set(r.key, r.value);
+  }
+  return map;
+}
+
 export async function setSetting(
   db: Db,
   key: string,
@@ -30,6 +48,10 @@ export async function setSetting(
       target: schema.appSettings.key,
       set: { value },
     });
+}
+
+export async function deleteSetting(db: Db, key: string): Promise<void> {
+  await db.delete(schema.appSettings).where(eq(schema.appSettings.key, key));
 }
 
 export async function getSheetSettings(db: Db) {

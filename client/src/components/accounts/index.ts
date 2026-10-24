@@ -1,3 +1,13 @@
 export { AccountItemCard } from "./AccountItemCard";
 export type { AccountItemCardProps } from "./AccountItemCard";
 export { AccountPages } from "./AccountPages";
+export { AccountTableView } from "./AccountTableView";
+export { AccountPlatformColumn } from "./AccountPlatformColumn";
+export type { AccountPlatformColumnProps } from "./AccountPlatformColumn";
+export { AccountAddForm } from "./AccountAddForm";
+export type { AccountAddFormProps } from "./AccountAddForm";
+export { ExtensionStatusCard } from "./ExtensionStatusCard";
+export type { ExtensionStatusCardProps } from "./ExtensionStatusCard";
+export * from "./accountTypes";
+export * from "./utils/accountFilters";
+export * from "./hooks/usePlatformAccountManager";

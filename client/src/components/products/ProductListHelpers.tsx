@@ -1,9 +1,33 @@
 import type { ReactNode } from "react";
 import type { Product } from "../../types";
 import { driveStatusLabel } from "../../utils/format";
-import { btnGhost, inputCls, labelCls } from "../../utils/styles";
+import { fuzzyMatchVi } from "../../utils/search";
+import { inputCls, labelCls } from "../../utils/styles";
+import { Badge } from "../ui/Badge";
 import { DriveImageStrip } from "../ui/DriveImageStrip";
+import { Pagination } from "../ui/Pagination";
 import { ProductThumb } from "../ui/ProductThumb";
+import { SearchInput } from "../ui/SearchInput";
+import {
+  CarIcon,
+  ScaleIcon,
+  RulerIcon,
+  ColorIcon,
+  PriceTagIcon,
+  StockIcon,
+  TruckIcon,
+} from "../ui/Icons";
+
+export {
+  MetaIcon,
+  CarIcon,
+  ScaleIcon,
+  RulerIcon,
+  ColorIcon,
+  PriceTagIcon,
+  StockIcon,
+  TruckIcon,
+} from "../ui/Icons";
 
 export const PRODUCT_PAGE_SIZE = 10;
 export { useProductFilterPagination } from "./useProductFilterPagination";
@@ -46,10 +70,10 @@ export function filterProductsBySearch(
 ): Product[] {
   if (!needle) return list;
   return list.filter((p) =>
-    [p.name, p.maker, p.color, p.colors.join(" "), p.sku, p.stt, p.scale]
-      .join(" ")
-      .toLowerCase()
-      .includes(needle),
+    fuzzyMatchVi(
+      [p.name, p.maker, p.color, p.colors.join(" "), p.sku, p.stt, p.scale].join(" "),
+      needle,
+    ),
   );
 }
 
@@ -92,81 +116,7 @@ export function sortProducts(list: Product[], sort: ProductSort): Product[] {
   });
 }
 
-export function MetaIcon({ children }: { children: ReactNode }) {
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className="h-4 w-4 shrink-0 text-[var(--text)]"
-    >
-      {children}
-    </svg>
-  );
-}
 
-export const CarIcon = () => (
-  <MetaIcon>
-    <path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.5 3A3.8 3.8 0 0 0 2 12.9V16c0 .6.4 1 1 1h2" />
-    <circle cx="7" cy="17" r="2" />
-    <path d="M9 17h6" />
-    <circle cx="17" cy="17" r="2" />
-  </MetaIcon>
-);
-
-export const ScaleIcon = () => (
-  <MetaIcon>
-    <path d="M15 3h6v6" />
-    <path d="M9 21H3v-6" />
-    <path d="M21 3l-7 7" />
-    <path d="M3 21l7-7" />
-  </MetaIcon>
-);
-
-export const RulerIcon = () => (
-  <MetaIcon>
-    <path d="M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.4 2.4 0 0 1 0-3.4l2.6-2.6a2.4 2.4 0 0 1 3.4 0Z" />
-    <path d="m14.5 12.5 2-2" />
-    <path d="m11.5 9.5 2-2" />
-    <path d="m8.5 6.5 2-2" />
-    <path d="m17.5 15.5 2-2" />
-  </MetaIcon>
-);
-
-export const ColorIcon = () => (
-  <MetaIcon>
-    <path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z" />
-  </MetaIcon>
-);
-
-export const PriceTagIcon = () => (
-  <MetaIcon>
-    <path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z" />
-    <circle cx="7.5" cy="7.5" r=".5" fill="currentColor" />
-  </MetaIcon>
-);
-
-export const StockIcon = () => (
-  <MetaIcon>
-    <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" />
-    <path d="m3.3 7 8.7 5 8.7-5" />
-    <path d="M12 22V12" />
-  </MetaIcon>
-);
-
-export const TruckIcon = () => (
-  <MetaIcon>
-    <path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2" />
-    <path d="M15 18H9" />
-    <path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 17.52 8H14" />
-    <circle cx="17" cy="18" r="2" />
-    <circle cx="7" cy="18" r="2" />
-  </MetaIcon>
-);
 
 export function ProductMetaItem({
   icon,
@@ -279,14 +229,13 @@ export function ProductListCard({
             target="_blank"
             rel="noreferrer"
             aria-label={`Mở thư mục Drive của ${p.name} (đã có ${p.drive_images.length} ảnh thật từ Drive)`}
-            className="rounded-full bg-[var(--surface-alt)] px-2 py-0.5 font-semibold text-[var(--ok)]"
           >
-            Có {p.drive_images.length} ảnh thật từ Drive (bản JPEG)
+            <Badge variant="ok">
+              Có {p.drive_images.length} ảnh thật từ Drive (bản JPEG)
+            </Badge>
           </a>
         ) : (
-          <span className="rounded-full bg-[var(--surface-alt)] px-2 py-0.5 font-semibold text-[var(--danger)]">
-            {driveStatusLabel(p)}
-          </span>
+          <Badge variant="danger">{driveStatusLabel(p)}</Badge>
         )}
         {p.video_url ? (
           <a
@@ -294,14 +243,11 @@ export function ProductListCard({
             target="_blank"
             rel="noreferrer"
             aria-label={`Mở video của ${p.name}`}
-            className="rounded-full bg-[var(--surface-alt)] px-2 py-0.5 font-semibold text-[var(--ok)]"
           >
-            Có video
+            <Badge variant="ok">Có video</Badge>
           </a>
         ) : (
-          <span className="rounded-full bg-[var(--surface-alt)] px-2 py-0.5 font-semibold text-[var(--dim)]">
-            Chưa có video
-          </span>
+          <Badge variant="dim">Chưa có video</Badge>
         )}
       </p>
       <DriveImageStrip images={p.drive_images} label={p.name} max={7} />
@@ -351,12 +297,11 @@ export function ProductListControls({
           <label className={labelCls} htmlFor={searchId}>
             Tìm sản phẩm trong danh sách
           </label>
-          <input
+          <SearchInput
             id={searchId}
-            aria-label={searchAriaLabel}
-            className={inputCls}
+            ariaLabel={searchAriaLabel}
             value={search}
-            onChange={(e) => onSearchChange(e.target.value)}
+            onChange={onSearchChange}
             placeholder="Tìm theo tên xe, hãng xe, màu, mã SKU…"
           />
         </div>
@@ -401,10 +346,8 @@ export function ProductListControls({
 
 export function ProductListPagination({
   navLabel,
-  prevLabel,
-  nextLabel,
-  pageLabel,
-  pageNumbers,
+  prevLabel = "← Trang trước",
+  nextLabel = "Trang sau →",
   page,
   totalPages,
   rangeStart,
@@ -426,57 +369,18 @@ export function ProductListPagination({
 }) {
   if (total <= PRODUCT_PAGE_SIZE) return null;
   return (
-    <nav
-      aria-label={navLabel}
-      className="mt-4 flex flex-wrap items-center gap-2"
-    >
-      <button
-        type="button"
-        className={btnGhost}
-        disabled={page <= 1}
-        onClick={() => onPage(Math.max(1, page - 1))}
-        aria-label={prevLabel}
-      >
-        ← Trang trước
-      </button>
-      {pageNumbers.map((n, idx) => {
-        const prev = pageNumbers[idx - 1];
-        const gap = prev !== undefined && n - prev > 1;
-        return (
-          <span key={n} className="flex items-center gap-2">
-            {gap && (
-              <span aria-hidden className="text-sm text-[var(--dim)]">
-                …
-              </span>
-            )}
-            <button
-              type="button"
-              onClick={() => onPage(n)}
-              aria-label={pageLabel(n)}
-              aria-current={n === page ? "page" : undefined}
-              className={`min-w-10 rounded-[var(--radius)] px-3 py-2 text-sm font-semibold ${
-                n === page
-                  ? "bg-[var(--text)] text-[var(--bg)]"
-                  : "border border-[var(--border)] bg-[var(--surface)] text-[var(--text)]"
-              }`}
-            >
-              {n}
-            </button>
-          </span>
-        );
-      })}
-      <button
-        type="button"
-        className={btnGhost}
-        disabled={page >= totalPages}
-        onClick={() => onPage(Math.min(totalPages, page + 1))}
-        aria-label={nextLabel}
-      >
-        Trang sau →
-      </button>
-      <span className="text-sm text-[var(--dim)]" role="status">
-        {rangeStart}–{rangeEnd} / {total} sản phẩm
-      </span>
-    </nav>
+    <Pagination
+      page={page}
+      totalPages={totalPages}
+      onPageChange={onPage}
+      totalItems={total}
+      pageSize={PRODUCT_PAGE_SIZE}
+      rangeStart={rangeStart}
+      rangeEnd={rangeEnd}
+      itemLabel="sản phẩm"
+      navLabel={navLabel}
+      prevLabel={prevLabel}
+      nextLabel={nextLabel}
+    />
   );
 }

@@ -2,10 +2,37 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api";
 import type { Draft } from "../../types";
-import { btnGhost } from "../../utils/styles";
 import { useComposeJobs } from "../../context/ComposeJobsContext";
 import { QueueDraftCard } from "../queue/QueueDraftCard";
 import { QueueHistoryCard } from "../queue/QueueHistoryCard";
+import { EmptyState, Pagination, PillTabs, SearchInput } from "../ui";
+import { fuzzyMatchVi } from "../../utils/search";
+
+function matchesDraftSearch(d: Draft, query: string): boolean {
+  if (!query.trim()) return true;
+
+  const targetNames = (d.publish_records ?? [])
+    .map((r) => `${r.target_name} ${r.target_kind}`)
+    .join(" ");
+
+  const combined = [
+    d.product_name,
+    d.caption,
+    d.code,
+    d.sku,
+    d.stt,
+    d.maker,
+    d.color,
+    d.scale,
+    d.price,
+    d.selling_point,
+    targetNames,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  return fuzzyMatchVi(combined, query);
+}
 
 export function QueueSection({
   drafts,
@@ -24,6 +51,7 @@ export function QueueSection({
   const accountsQ = useQuery({ queryKey: ["accounts"], queryFn: () => api.listAccounts({}) });
 
   const [feedback, setFeedback] = useState<Record<number, { ok: boolean; text: string }>>({});
+  const [searchQuery, setSearchQuery] = useState("");
 
   const QUEUE_PAGE_SIZE = 5;
   type QueueTab = "draft" | "ready" | "history";
@@ -214,8 +242,14 @@ export function QueueSection({
 
   const activeTabDef = queueTabs.find((t) => t.id === queueTab) ?? queueTabs[0]!;
 
-  const listForTab = (t: (typeof queueTabs)[number]) => {
-    const filtered = drafts.filter((d) => t.matches(d));
+  const listForTab = (
+    t: (typeof queueTabs)[number],
+    query: string = searchQuery,
+  ) => {
+    const inTab = drafts.filter((d) => t.matches(d));
+    const filtered = query.trim()
+      ? inTab.filter((d) => matchesDraftSearch(d, query))
+      : inTab;
     if (t.id !== "history") return filtered;
     const latestAt = (d: Draft) =>
       Math.max(
@@ -227,7 +261,7 @@ export function QueueSection({
     return [...filtered].sort((a, b) => latestAt(b) - latestAt(a));
   };
 
-  const activeList = listForTab(activeTabDef);
+  const activeList = listForTab(activeTabDef, searchQuery);
   const totalPages = Math.max(1, Math.ceil(activeList.length / QUEUE_PAGE_SIZE));
   const currentPage = Math.min(queuePage[queueTab], totalPages);
   const pageStart = (currentPage - 1) * QUEUE_PAGE_SIZE;
@@ -238,34 +272,63 @@ export function QueueSection({
 
   return (
     <div className="space-y-4">
-      {/* Tab bar */}
-      <div role="tablist" aria-label="Các trang Hàng đợi" className="flex flex-wrap gap-2">
-        {queueTabs.map((t) => {
-          const count = listForTab(t).length;
-          const active = queueTab === t.id;
-          return (
-            <button
-              key={t.id}
-              role="tab"
-              aria-selected={active}
-              aria-label={`${t.label} (${count} bài)`}
-              onClick={() => setQueueTab(t.id)}
-              className={`rounded-full px-4 py-2 text-sm font-semibold whitespace-nowrap ${
-                active
-                  ? "bg-[var(--accent)] text-white"
-                  : "border border-[var(--border)] bg-[var(--surface)] text-[var(--text)]"
-              }`}
-            >
-              {t.label} ({count})
-            </button>
-          );
-        })}
+      {/* Tab bar & Thanh tìm kiếm */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <PillTabs<QueueTab>
+          ariaLabel="Các trang Hàng đợi"
+          tabs={queueTabs.map((t) => {
+            const allInTab = drafts.filter((d) => t.matches(d)).length;
+            const matchInTab = listForTab(t, searchQuery).length;
+            const badgeCount = searchQuery.trim() ? matchInTab : allInTab;
+            return {
+              id: t.id,
+              label: t.label,
+              count: badgeCount,
+              ariaLabel: `${t.label} (${badgeCount} bài)`,
+            };
+          })}
+          activeId={queueTab}
+          onChange={(id) => setQueueTab(id)}
+        />
+
+        {/* Thanh tìm kiếm dùng chung */}
+        <SearchInput
+          id="queue-search"
+          ariaLabel="Tìm kiếm bài viết trong Hàng đợi"
+          value={searchQuery}
+          onChange={(val) => {
+            setSearchQuery(val);
+            setQueuePage((s) => ({ ...s, [queueTab]: 1 }));
+          }}
+          placeholder="Tìm bài viết, caption, mã…"
+          className="w-full sm:w-64"
+        />
       </div>
+
+      {/* Thông tin đang lọc kết quả */}
+      {searchQuery.trim() && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-[var(--radius)] bg-[var(--surface-alt)] px-3 py-1.5 text-xs">
+          <span className="text-[var(--dim)]">
+            Đang tìm: <strong className="text-[var(--text)]">“{searchQuery.trim()}”</strong> ({activeList.length} bài trong mục {activeTabDef.label.toLowerCase()})
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              setSearchQuery("");
+              setQueuePage((s) => ({ ...s, [queueTab]: 1 }));
+            }}
+            className="font-semibold text-[var(--accent)] hover:underline"
+          >
+            Xóa tìm kiếm
+          </button>
+        </div>
+      )}
 
       {/* Main Section Content */}
       <section aria-label={activeTabDef.ariaLabel}>
-        <h2 className="text-lg font-bold">
-          {`${activeTabDef.label} (${activeList.length})`}
+        {/* Tiêu đề đã hiển thị trên tab pill nên ẩn trực quan để tránh lặp tiêu đề */}
+        <h2 className="sr-only">
+          {activeTabDef.label}
         </h2>
 
         {loading && <p className="mt-2 text-sm text-[var(--dim)]">Đang tải…</p>}
@@ -313,52 +376,40 @@ export function QueueSection({
         </ul>
 
         {!loading && activeList.length === 0 && (
-          <p className="mt-2 text-sm text-[var(--dim)]">{activeTabDef.emptyText}</p>
+          <EmptyState
+            message={
+              searchQuery.trim()
+                ? `Không tìm thấy bài nào khớp với “${searchQuery.trim()}” trong mục ${activeTabDef.label.toLowerCase()}.`
+                : activeTabDef.emptyText
+            }
+            actionLabel={searchQuery.trim() ? "Xóa từ khóa tìm kiếm" : undefined}
+            onAction={
+              searchQuery.trim()
+                ? () => {
+                    setSearchQuery("");
+                    setQueuePage((s) => ({ ...s, [queueTab]: 1 }));
+                  }
+                : undefined
+            }
+          />
         )}
 
         {/* Phân trang */}
         {activeList.length > 0 && (
-          <div
-            className="mt-4 flex flex-wrap items-center justify-between gap-3"
-            aria-label={`Phân trang ${activeTabDef.label}`}
-          >
-            <p className="text-xs text-[var(--dim)]">
-              Trang {currentPage}/{totalPages} — hiển thị {pagedList.length} / {activeList.length} bài (tối đa {QUEUE_PAGE_SIZE} bài/trang)
-            </p>
-            <div className="flex flex-wrap items-center gap-1.5">
-              <button
-                className={btnGhost}
-                disabled={currentPage <= 1}
-                aria-label={`Trang trước — ${activeTabDef.label}`}
-                onClick={() => setPageForTab(queueTab, currentPage - 1)}
-              >
-                ‹ Trước
-              </button>
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
-                <button
-                  key={p}
-                  aria-label={`Trang ${p} — ${activeTabDef.label}`}
-                  aria-current={p === currentPage ? "page" : undefined}
-                  onClick={() => setPageForTab(queueTab, p)}
-                  className={`min-w-9 rounded-[var(--radius)] px-2 py-2 text-sm font-semibold ${
-                    p === currentPage
-                      ? "bg-[var(--accent)] text-white"
-                      : "border border-[var(--border)] bg-[var(--surface)]"
-                  }`}
-                >
-                  {p}
-                </button>
-              ))}
-              <button
-                className={btnGhost}
-                disabled={currentPage >= totalPages}
-                aria-label={`Trang sau — ${activeTabDef.label}`}
-                onClick={() => setPageForTab(queueTab, currentPage + 1)}
-              >
-                Sau ›
-              </button>
-            </div>
-          </div>
+          <Pagination
+            page={currentPage}
+            totalPages={totalPages}
+            onPageChange={(p) => setPageForTab(queueTab, p)}
+            totalItems={activeList.length}
+            pageSize={QUEUE_PAGE_SIZE}
+            itemLabel="bài"
+            navLabel={`Phân trang ${activeTabDef.label}`}
+            infoText={
+              searchQuery.trim()
+                ? `Trang ${currentPage}/${totalPages} — hiển thị ${pagedList.length} / ${activeList.length} bài · đang tìm theo “${searchQuery.trim()}”`
+                : undefined
+            }
+          />
         )}
       </section>
     </div>

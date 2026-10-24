@@ -4,6 +4,7 @@ import { api } from "../../api";
 import type { Analytics, ChannelInsight, Metric } from "../../types";
 import { btnPrimary, btnDanger, inputCls, labelCls } from "../../utils/styles";
 import { fmtDate } from "../../utils/format";
+import { CollapsibleCard } from "../ui";
 
 /* ------------------------------------------------------------ Phân tích */
 
@@ -268,11 +269,15 @@ export function AnalyticsSection({ onGoQueue }: { onGoQueue: () => void }) {
         </ul>
       </section>
 
-      <section aria-label="Ghi chỉ số bài đã đăng">
-        <h2 className="text-lg font-bold">Ghi chỉ số bài đã đăng</h2>
+      <CollapsibleCard
+        as="section"
+        title="Ghi chỉ số bài đã đăng"
+        subtitle="Nhập số liệu tiếp cận, like, inbox, đơn để tối ưu khung giờ cho từng kênh"
+        defaultOpen={true}
+      >
         <form
           onSubmit={submit}
-          className="mt-3 space-y-3 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] p-4"
+          className="space-y-3 p-4"
         >
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -421,7 +426,7 @@ export function AnalyticsSection({ onGoQueue }: { onGoQueue: () => void }) {
             </p>
           )}
         </form>
-      </section>
+      </CollapsibleCard>
 
       <section aria-label="Lịch sử chỉ số đã ghi">
         <h2 className="text-lg font-bold">

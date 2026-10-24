@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { Draft } from "../../types";
 import { fmtDate } from "../../utils/format";
 import { btnDanger, btnGhost } from "../../utils/styles";
-import { DriveImageStrip } from "../ui/DriveImageStrip";
+import { Badge, DriveImageStrip, FeedbackBanner } from "../ui";
 import { getKindLabel } from "./queueHelpers";
 
 export interface QueueHistoryCardProps {
@@ -51,24 +51,13 @@ export function QueueHistoryCard({
       </div>
 
       <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs">
-        <span className="rounded-full bg-[var(--surface-alt)] px-2 py-0.5 font-semibold text-[var(--ok)]">
-          ✓ Đã đăng
-        </span>
+        <Badge variant="ok">✓ Đã đăng</Badge>
         {targetSummary && (
           <span className="font-medium text-[var(--dim)]">{targetSummary}</span>
         )}
       </p>
 
-      {feedback && (
-        <p
-          role="status"
-          className={`mt-2 text-xs font-medium ${
-            feedback.ok ? "text-[var(--ok)]" : "text-[var(--danger)]"
-          }`}
-        >
-          {feedback.text}
-        </p>
-      )}
+      <FeedbackBanner feedback={feedback} />
 
       {open && (
         <div className="mt-3">
@@ -92,9 +81,9 @@ export function QueueHistoryCard({
             <ul className="mt-1.5 space-y-1.5">
               {publishedRecords.map((r) => (
                 <li key={r.id} className="text-xs leading-5">
-                  <span className="mr-1.5 rounded-full bg-[var(--surface-alt)] px-2 py-0.5 font-semibold text-[var(--ok)]">
+                  <Badge variant="ok" className="mr-1.5">
                     ✓ Đã đăng
-                  </span>
+                  </Badge>
                   <span className="font-semibold">
                     {getKindLabel(r.target_kind)} {r.target_name}
                   </span>{" "}

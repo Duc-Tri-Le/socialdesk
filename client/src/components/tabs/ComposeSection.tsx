@@ -4,8 +4,7 @@ import { api, type ApiResponse } from "../../api";
 import type { Product } from "../../types";
 import { btnPrimary, btnGhost, inputCls, labelCls } from "../../utils/styles";
 import { driveStatusLabel, fileToBase64 } from "../../utils/format";
-import { Hint } from "../ui/Hint";
-import { SheetImagePreview } from "../ui/SheetImagePreview";
+import { Hint, SheetImagePreview, CollapsibleCard, Badge } from "../ui";
 import {
   useProductFilterPagination,
   ProductListCard,
@@ -87,6 +86,7 @@ export function ComposeSection({
   const [form, setForm] = useState<DraftFormState>(EMPTY_DRAFT_FORM);
 
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [isComposeFormOpen, setIsComposeFormOpen] = useState(true);
   const [composeMsg, setComposeMsg] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
   const [queuedMsg, setQueuedMsg] = useState("");
@@ -211,6 +211,7 @@ export function ComposeSection({
   // sẵn. Các nút chọn màu dưới thẻ chỉ còn xuất hiện với dữ liệu gộp
   // cũ (nhiều màu trong một thẻ) còn sót trước lần đồng bộ kế tiếp.
   const useProduct = (p: Product, chosenColor?: string) => {
+    setIsComposeFormOpen(true);
     setSelectedProduct(p);
     setComposeMsg("");
     setSuccessMsg("");
@@ -324,38 +325,56 @@ export function ComposeSection({
   return (
     <div className="grid items-start gap-6 lg:grid-cols-2">
       <section aria-label="Soạn bản nháp bài đăng" className="min-w-0 lg:sticky lg:top-20 lg:max-h-[calc(100dvh-6rem)] lg:overflow-y-auto lg:overscroll-contain lg:pb-1 lg:pr-1">
-        <h2 className="text-lg font-bold">Soạn bản nháp</h2>
-        {successMsg && (
-          <div
-            className="mt-2 rounded-[var(--radius)] border-2 border-[var(--ok)] bg-[var(--surface)] p-3"
-            role="status"
-          >
-            <p className="text-sm font-semibold text-[var(--ok)]">
-              ✓ {successMsg}
-            </p>
-            <button
-              type="button"
-              className={`${btnGhost} mt-2`}
-              onClick={onGoQueue}
+        <CollapsibleCard
+          title={
+            selectedProduct
+              ? `Soạn bài: ${form.product_name || selectedProduct.name}`
+              : "Soạn bản nháp bài đăng"
+          }
+          subtitle={
+            selectedProduct
+              ? `Mã: ${form.stt || "—"} · Giá: ${form.price || "—"} · Kho: ${form.stock || "1"}`
+              : "Chọn sản phẩm ở danh sách bên cạnh hoặc nhập thông tin trực tiếp"
+          }
+          badge={
+            selectedProduct ? (
+              <Badge variant="accent">Đã chọn sản phẩm</Badge>
+            ) : undefined
+          }
+          isOpen={isComposeFormOpen}
+          onToggle={setIsComposeFormOpen}
+        >
+          {successMsg && (
+            <div
+              className="m-4 mb-0 rounded-[var(--radius)] border-2 border-[var(--ok)] bg-[var(--surface-alt)] p-3"
+              role="status"
             >
-              Xem Hàng đợi duyệt
-            </button>
-          </div>
-        )}
-        {queuedMsg && (
-          <div
-            className="mt-2 rounded-[var(--radius)] border-2 border-[var(--accent)] bg-[var(--surface)] p-3"
-            role="status"
-          >
-            <p className="text-sm font-semibold">{queuedMsg}</p>
-          </div>
-        )}
-        {composeMsg && (
-          <p className="mt-2 text-sm font-medium" role="status">
-            {composeMsg}
-          </p>
-        )}
-        <form onSubmit={submitDraft} className="mt-3 space-y-3 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] p-4">
+              <p className="text-sm font-semibold text-[var(--ok)]">
+                ✓ {successMsg}
+              </p>
+              <button
+                type="button"
+                className={`${btnGhost} mt-2`}
+                onClick={onGoQueue}
+              >
+                Xem Hàng đợi duyệt
+              </button>
+            </div>
+          )}
+          {queuedMsg && (
+            <div
+              className="m-4 mb-0 rounded-[var(--radius)] border-2 border-[var(--accent)] bg-[var(--surface-alt)] p-3"
+              role="status"
+            >
+              <p className="text-sm font-semibold">{queuedMsg}</p>
+            </div>
+          )}
+          {composeMsg && (
+            <p className="mx-4 mt-3 text-sm font-medium" role="status">
+              {composeMsg}
+            </p>
+          )}
+          <form onSubmit={submitDraft} className="space-y-3 p-4">
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={labelCls} htmlFor="df-stt">Mã STT</label>
@@ -562,6 +581,7 @@ export function ComposeSection({
             Viết bài &amp; đưa vào hàng đợi soạn bài
           </button>
         </form>
+        </CollapsibleCard>
       </section>
 
       <section aria-label="Chọn sản phẩm để soạn bài" className="min-w-0">

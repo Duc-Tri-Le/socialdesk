@@ -8,7 +8,7 @@ import {
   inputCls,
   labelCls,
 } from "../../utils/styles";
-import { DriveImageStrip } from "../ui/DriveImageStrip";
+import { Badge, DriveImageStrip, FeedbackBanner } from "../ui";
 import { useComposeJobs } from "../../context/ComposeJobsContext";
 import { TargetPicker } from "./TargetPicker";
 import { PublishConfirmDialog } from "./PublishConfirmDialog";
@@ -199,13 +199,9 @@ export function QueueDraftCard({
       {/* Dòng tóm tắt trạng thái gọn nhẹ như Lịch sử bài đăng */}
       <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs">
         {isDraft ? (
-          <span className="rounded-full bg-[var(--surface-alt)] px-2 py-0.5 font-semibold text-[var(--accent-ink)]">
-            ⏳ Chờ duyệt
-          </span>
+          <Badge variant="accent">⏳ Chờ duyệt</Badge>
         ) : (
-          <span className="rounded-full bg-[var(--surface-alt)] px-2 py-0.5 font-semibold text-[var(--ok)]">
-            ✓ Đã duyệt
-          </span>
+          <Badge variant="ok">✓ Đã duyệt</Badge>
         )}
         {summaryParts.length > 0 && (
           <span className="font-medium text-[var(--dim)]">
@@ -213,38 +209,21 @@ export function QueueDraftCard({
           </span>
         )}
         {isDraft && d.placeholders.length > 0 && (
-          <span className="rounded-full bg-[var(--surface-alt)] px-2 py-0.5 font-semibold text-[var(--danger)]">
-            ⚠ Còn mục chưa điền
-          </span>
+          <Badge variant="danger">⚠ Còn mục chưa điền</Badge>
         )}
         {!isDraft && hasNeedsLogin && (
-          <span className="rounded-full bg-[var(--surface-alt)] px-2 py-0.5 font-semibold text-[var(--warn)]">
-            🔑 Chờ đăng nhập
-          </span>
+          <Badge variant="warn">🔑 Chờ đăng nhập</Badge>
         )}
         {!isDraft && !hasNeedsLogin && hasFailed && (
-          <span className="rounded-full bg-[var(--surface-alt)] px-2 py-0.5 font-semibold text-[var(--danger)]">
-            ⚠ Đăng lỗi
-          </span>
+          <Badge variant="danger">⚠ Đăng lỗi</Badge>
         )}
         {!isDraft && hasQueued && (
-          <span className="rounded-full bg-[var(--surface-alt)] px-2 py-0.5 font-semibold text-[var(--accent-ink)]">
-            ⏳ Đang đăng…
-          </span>
+          <Badge variant="accent">⏳ Đang đăng…</Badge>
         )}
       </p>
 
       {/* Feedback banner */}
-      {feedback && (
-        <p
-          role="status"
-          className={`mt-2 text-xs font-medium ${
-            feedback.ok ? "text-[var(--ok)]" : "text-[var(--danger)]"
-          }`}
-        >
-          {feedback.text}
-        </p>
-      )}
+      <FeedbackBanner feedback={feedback} />
 
       {/* Chi tiết khi mở rộng (Xem chi tiết) */}
       {open && (
@@ -266,12 +245,13 @@ export function QueueDraftCard({
                 target="_blank"
                 rel="noreferrer"
                 aria-label={`Thư mục Drive của ${d.product_name} — đã gắn ${d.drive_images.length} ảnh vào bài`}
-                className="rounded-full bg-[var(--surface-alt)] px-2 py-0.5 font-semibold text-[var(--ok)]"
               >
-                Có {d.drive_images.length} ảnh đã gắn vào bài
+                <Badge variant="ok">
+                  Có {d.drive_images.length} ảnh đã gắn vào bài
+                </Badge>
               </a>
             ) : (
-              <span className="rounded-full bg-[var(--surface-alt)] px-2 py-0.5 font-semibold text-[var(--dim)]">
+              <Badge variant="dim">
                 {d.drive_status === "empty"
                   ? d.drive_error
                     ? `Chưa có ảnh — ${d.drive_error}`
@@ -281,7 +261,7 @@ export function QueueDraftCard({
                     : d.drive_status === "no_link"
                       ? `Chưa có ảnh — ${d.drive_error || "chưa có link thư mục Drive"}`
                       : "Chưa có ảnh thật từ Drive"}
-              </span>
+              </Badge>
             )}
 
             {d.video_url ? (
@@ -290,30 +270,23 @@ export function QueueDraftCard({
                 target="_blank"
                 rel="noreferrer"
                 aria-label={`Video của ${d.product_name}`}
-                className="rounded-full bg-[var(--surface-alt)] px-2 py-0.5 font-semibold text-[var(--ok)]"
               >
-                Có video đã gắn vào bài
+                <Badge variant="ok">Có video đã gắn vào bài</Badge>
               </a>
             ) : (
-              <span className="rounded-full bg-[var(--surface-alt)] px-2 py-0.5 font-semibold text-[var(--dim)]">
-                Chưa có video
-              </span>
+              <Badge variant="dim">Chưa có video</Badge>
             )}
 
             {d.caption_source === "ai" && (
-              <span className="rounded-full bg-[var(--surface-alt)] px-2 py-0.5 font-semibold text-[var(--ok)]">
-                Bài do AI viết
-              </span>
+              <Badge variant="ok">Bài do AI viết</Badge>
             )}
             {d.caption_source === "template" && (
-              <span className="rounded-full bg-[var(--surface-alt)] px-2 py-0.5 font-semibold text-[var(--danger)]">
+              <Badge variant="danger">
                 Bài theo mẫu dự phòng — AI chưa viết được
-              </span>
+              </Badge>
             )}
             {d.caption_source === "manual" && (
-              <span className="rounded-full bg-[var(--surface-alt)] px-2 py-0.5 font-semibold text-[var(--dim)]">
-                Nội dung bạn đã sửa tay
-              </span>
+              <Badge variant="dim">Nội dung bạn đã sửa tay</Badge>
             )}
           </p>
 

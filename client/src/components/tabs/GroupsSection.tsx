@@ -4,6 +4,7 @@ import { api } from "../../api";
 import type { Group, ScannedGroup } from "../../types";
 import { btnPrimary, btnDanger, inputCls, labelCls } from "../../utils/styles";
 import { fmtDate, fmtMembers } from "../../utils/format";
+import { CollapsibleCard } from "../ui";
 
 export function GroupsSection() {
   const queryClient = useQueryClient();
@@ -61,9 +62,13 @@ export function GroupsSection() {
 
   return (
     <div className="space-y-6">
-      <section aria-label="Thêm nhóm bằng link Facebook">
-        <h2 className="text-lg font-bold">Thêm nhóm bằng link Facebook</h2>
-        <form onSubmit={submitSave} className="mt-3 space-y-3 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] p-4">
+      <CollapsibleCard
+        as="section"
+        title="Thêm nhóm bằng link Facebook"
+        subtitle="Dán link nhóm để hệ thống tự động quét chi tiết và thành viên"
+        defaultOpen={true}
+      >
+        <form onSubmit={submitSave} className="space-y-3 p-4">
           {!adderAccount.data?.linked && (
             <div
               className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface-alt)] p-3"
@@ -105,6 +110,7 @@ export function GroupsSection() {
             </span>
           </div>
         </form>
+      </CollapsibleCard>
 
         {saveLinks.isError && (
           <p className="mt-3 text-sm font-medium text-[var(--danger)]" role="alert">
@@ -163,8 +169,6 @@ export function GroupsSection() {
             </p>
           </div>
         )}
-
-      </section>
 
       <section aria-label="Danh sách hội nhóm">
         <h2 className="text-lg font-bold">Danh sách nhóm</h2>

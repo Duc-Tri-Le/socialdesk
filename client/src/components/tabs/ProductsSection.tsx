@@ -4,8 +4,7 @@ import { api } from "../../api";
 import type { Product, SheetConfig, SheetSource } from "../../types";
 import { btnPrimary, btnGhost, btnDanger, inputCls, labelCls } from "../../utils/styles";
 import { fmtDate, shortenSyncMessage } from "../../utils/format";
-import { Hint } from "../ui/Hint";
-import { SheetImagePreview } from "../ui/SheetImagePreview";
+import { Hint, SheetImagePreview, CollapsibleCard, Badge } from "../ui";
 import {
   useProductFilterPagination,
   ProductListCard,
@@ -71,6 +70,9 @@ export function ProductsSection() {
     video_url: "",
   });
   const [productMsg, setProductMsg] = useState("");
+  const [isProductFormOpen, setIsProductFormOpen] = useState(false);
+  const isEditing = productForm.id > 0;
+  const showProductForm = isEditing || isProductFormOpen;
 
   const refreshAll = () => {
     queryClient.invalidateQueries({ queryKey: ["products"] });
@@ -148,6 +150,7 @@ export function ProductsSection() {
         image_url: "",
         video_url: "",
       });
+      setIsProductFormOpen(false);
     },
   });
   const deleteProduct = useMutation({
@@ -311,103 +314,109 @@ export function ProductsSection() {
           )}
         </div>
 
-        <form
-          onSubmit={submitSheet}
-          aria-label="Thêm nguồn Sheet"
-          className="space-y-3 border-t border-[var(--border)] p-4"
+        <CollapsibleCard
+          title="Thêm nguồn Sheet"
+          defaultOpen={!cfg?.sources.length}
+          headerTag="h3"
+          className="border-t border-[var(--border)] rounded-none border-x-0 border-b-0"
         >
-          <h3 className="text-sm font-semibold">Thêm nguồn Sheet</h3>
-          <div>
-            <label className={labelCls} htmlFor="sh-name">Tên nguồn Sheet *</label>
-            <input
-              id="sh-name"
-              aria-label="Tên nguồn Sheet"
-              className={inputCls}
-              value={sheetForm.name}
-              onChange={(e) =>
-                setSheetForm({ ...sheetForm, name: e.target.value })
-              }
-              placeholder="Đặt tên cho nguồn Sheet"
-              required
-            />
-          </div>
-          <div>
-            <label className={labelCls} htmlFor="sh-link">Link hoặc ID file Google Sheet *</label>
-            <input
-              id="sh-link"
-              aria-label="Link hoặc ID file Google Sheet"
-              className={inputCls}
-              value={sheetForm.spreadsheet}
-              onChange={(e) =>
-                setSheetForm({ ...sheetForm, spreadsheet: e.target.value })
-              }
-              placeholder="https://docs.google.com/spreadsheets/d/…"
-              required
-            />
-          </div>
-          <div className="grid gap-3">
-            <div>
-              <label className={labelCls} htmlFor="sh-tab">Tên tab trong Sheet</label>
-              <input
-                id="sh-tab"
-                aria-label="Tên tab trong Sheet"
-                className={inputCls}
-                value={sheetForm.sheet_name}
-                onChange={(e) =>
-                  setSheetForm({ ...sheetForm, sheet_name: e.target.value })
-                }
-                placeholder="Để trống = tab đầu tiên"
-              />
-            </div>
-            <div>
-              <label className={labelCls} htmlFor="sh-range">Phạm vi ô (không bắt buộc)</label>
-              <input
-                id="sh-range"
-                aria-label="Phạm vi ô"
-                className={inputCls}
-                value={sheetForm.range}
-                onChange={(e) =>
-                  setSheetForm({ ...sheetForm, range: e.target.value })
-                }
-                placeholder="Để trống = lấy toàn bộ dữ liệu"
-              />
-            </div>
-          </div>
-          <button
-            type="submit"
-            className={`${btnPrimary} w-full sm:w-auto`}
-            disabled={saveSheet.isPending}
+          <form
+            onSubmit={submitSheet}
+            aria-label="Thêm nguồn Sheet"
+            className="space-y-3 p-4"
           >
-            {saveSheet.isPending ? "Đang lưu…" : "Lưu nguồn Sheet"}
-          </button>
-        </form>
+            <div>
+              <label className={labelCls} htmlFor="sh-name">Tên nguồn Sheet *</label>
+              <input
+                id="sh-name"
+                aria-label="Tên nguồn Sheet"
+                className={inputCls}
+                value={sheetForm.name}
+                onChange={(e) =>
+                  setSheetForm({ ...sheetForm, name: e.target.value })
+                }
+                placeholder="Đặt tên cho nguồn Sheet"
+                required
+              />
+            </div>
+            <div>
+              <label className={labelCls} htmlFor="sh-link">Link hoặc ID file Google Sheet *</label>
+              <input
+                id="sh-link"
+                aria-label="Link hoặc ID file Google Sheet"
+                className={inputCls}
+                value={sheetForm.spreadsheet}
+                onChange={(e) =>
+                  setSheetForm({ ...sheetForm, spreadsheet: e.target.value })
+                }
+                placeholder="https://docs.google.com/spreadsheets/d/…"
+                required
+              />
+            </div>
+            <div className="grid gap-3">
+              <div>
+                <label className={labelCls} htmlFor="sh-tab">Tên tab trong Sheet</label>
+                <input
+                  id="sh-tab"
+                  aria-label="Tên tab trong Sheet"
+                  className={inputCls}
+                  value={sheetForm.sheet_name}
+                  onChange={(e) =>
+                    setSheetForm({ ...sheetForm, sheet_name: e.target.value })
+                  }
+                  placeholder="Để trống = tab đầu tiên"
+                />
+              </div>
+              <div>
+                <label className={labelCls} htmlFor="sh-range">Phạm vi ô (không bắt buộc)</label>
+                <input
+                  id="sh-range"
+                  aria-label="Phạm vi ô"
+                  className={inputCls}
+                  value={sheetForm.range}
+                  onChange={(e) =>
+                    setSheetForm({ ...sheetForm, range: e.target.value })
+                  }
+                  placeholder="Để trống = lấy toàn bộ dữ liệu"
+                />
+              </div>
+            </div>
+            <button
+              type="submit"
+              className={`${btnPrimary} w-full sm:w-auto`}
+              disabled={saveSheet.isPending}
+            >
+              {saveSheet.isPending ? "Đang lưu…" : "Lưu nguồn Sheet"}
+            </button>
+          </form>
+        </CollapsibleCard>
       </section>
 
-      <section
-        aria-label="Thêm sản phẩm thủ công"
-        className={`overflow-hidden rounded-[var(--radius)] border bg-[var(--surface)] ${
+      <CollapsibleCard
+        as="section"
+        title={
+          productForm.id
+            ? `Đang sửa sản phẩm #${productForm.id}`
+            : "Thêm sản phẩm thủ công"
+        }
+        badge={
+          productForm.id > 0 ? (
+            <Badge variant="accent">Đang sửa</Badge>
+          ) : undefined
+        }
+        isOpen={showProductForm}
+        onToggle={setIsProductFormOpen}
+        className={
           productForm.id
             ? "border-2 border-[var(--accent)]"
             : "border-[var(--border)]"
-        }`}
+        }
       >
         <form
           ref={productFormRef}
           onSubmit={submitProduct}
           className="scroll-mt-24"
         >
-          <header className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] px-4 py-3">
-            <h2 className="text-base font-bold">
-              {productForm.id
-                ? `Đang sửa sản phẩm #${productForm.id}`
-                : "Thêm sản phẩm thủ công"}
-            </h2>
-            {productForm.id > 0 && (
-              <span className="rounded-full bg-[var(--accent)] px-2 py-0.5 text-xs font-semibold text-white">
-                Đang sửa
-              </span>
-            )}
-          </header>
           <div className="space-y-4 p-4">
             <div role="group" aria-label="Thông tin xe" className="space-y-3">
               <p className="text-xs font-bold text-[var(--dim)]">
@@ -515,6 +524,7 @@ export function ProductsSection() {
                 aria-label="Hủy sửa, quay về thêm sản phẩm thủ công"
                 onClick={() => {
                   setProductMsg("");
+                  setIsProductFormOpen(false);
                   setProductForm({
                     id: 0,
                     stt: "",
@@ -541,7 +551,7 @@ export function ProductsSection() {
             )}
           </footer>
         </form>
-      </section>
+      </CollapsibleCard>
       </div>
 
       <section aria-label="Danh sách sản phẩm" className="min-w-0 lg:col-span-3">
@@ -590,6 +600,7 @@ export function ProductsSection() {
                 <button
                   className={btnGhost}
                   onClick={() => {
+                    setIsProductFormOpen(true);
                     setProductForm({
                       id: p.id,
                       stt: p.stt,

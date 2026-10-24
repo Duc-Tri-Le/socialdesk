@@ -1,7 +1,7 @@
 import { defineAction, z } from "@hatch/space-sdk";
 import { asc, eq } from "drizzle-orm";
 import * as schema from "../schema";
-import { getSetting, setSetting } from "../services/settings";
+import { getSetting, setSetting, getSettingsByPrefix, deleteSetting } from "../services/settings";
 import {
   accountOut,
   toAccountOut,
@@ -17,11 +17,19 @@ export const accountActions = {
     response: z.object({ accounts: z.array(accountOut) }),
     async handler(ctx) {
       const db = ctx.db<typeof schema>();
-      const rows = await db
-        .select()
-        .from(schema.accounts)
-        .orderBy(asc(schema.accounts.id));
-      return { accounts: rows.map(toAccountOut) };
+      // Truy vấn đồng thời danh sách tài khoản và bảng setting phiên (loại bỏ N+1 query)
+      const [rows, sessionMap] = await Promise.all([
+        db
+          .select()
+          .from(schema.accounts)
+          .orderBy(asc(schema.accounts.id)),
+        getSettingsByPrefix(db, "account_session_"),
+      ]);
+      const accountsOut = rows.map((r) => {
+        const savedStatus = sessionMap.get(`account_session_${r.id}`) ?? "";
+        return toAccountOut(r, savedStatus);
+      });
+      return { accounts: accountsOut };
     },
   }),
 
@@ -37,12 +45,6 @@ export const accountActions = {
     response: z.object({ ok: z.boolean(), message: z.string() }),
     async handler(ctx, args) {
       const db = ctx.db<typeof schema>();
-      // Tự bật "dùng để đăng" cho tài khoản mới THEO TỪNG NỀN TẢNG, để
-      // không tài khoản nào bị ẩn lặng lẽ khỏi Tổng quan và gói đăng:
-      // - Facebook chỉ chọn được 1 tài khoản tại một thời điểm → tự bật
-      //   khi chưa có nick Facebook nào đang được chọn dùng.
-      // - Instagram chọn được nhiều nick cùng lúc → tài khoản đã liên
-      //   kết mới thêm được tự bật luôn.
       const existing = await db
         .select()
         .from(schema.accounts)
@@ -55,7 +57,7 @@ export const accountActions = {
       const name =
         args.name.trim() ||
         (extCode ? `Nick Facebook (${extCode})` : "Nick Facebook");
-      await db.insert(schema.accounts).values({
+      const [newRow] = await db.insert(schema.accounts).values({
         platform: args.platform,
         name,
         handle: args.handle.trim(),
@@ -63,15 +65,18 @@ export const accountActions = {
         extensionCode: extCode,
         linked: args.linked ? 1 : 0,
         selected: autoSelect ? 1 : 0,
-      });
+      }).returning();
+      if (newRow) {
+        await setSetting(db, `account_session_${newRow.id}`, args.linked ? "logged_in" : "expired");
+      }
       ctx.invalidateQueries();
       return {
         ok: true,
         message: autoSelect
           ? `Đã thêm tài khoản ${args.platform} — ${name} và đang chọn dùng để đăng bài.`
           : args.linked
-            ? `Đã thêm tài khoản ${args.platform} — ${name} (đã liên kết, chưa chọn dùng để đăng — nick Facebook đang dùng vẫn giữ nguyên; bật “Đăng nhập bằng nick này” khi muốn chuyển).`
-            : `Đã thêm tài khoản ${args.platform} — ${name} (chưa liên kết — liên kết xong hãy bật dùng để đăng ở mục Tài khoản).`,
+            ? `Đã thêm tài khoản ${args.platform} — ${name} (đã liên kết, chưa chọn dùng để đăng; bật “Đang chọn” khi muốn chuyển).`
+            : `Đã thêm tài khoản ${args.platform} — ${name} (chưa liên kết).`,
       };
     },
   }),
@@ -89,27 +94,7 @@ export const accountActions = {
         .from(schema.accounts)
         .where(eq(schema.accounts.id, args.id));
       if (!row) return { ok: false, message: "Không tìm thấy tài khoản." };
-      if (args.selected && row.linked !== 1)
-        return {
-          ok: false,
-          message:
-            "Tài khoản chưa được đánh dấu đã liên kết — liên kết trong Meta Accounts Center trước.",
-        };
-      if (args.selected && row.platform === "Facebook") {
-        // Facebook: một lúc một tài khoản — bỏ chọn các nick Facebook khác.
-        const others = await db
-          .select()
-          .from(schema.accounts)
-          .where(eq(schema.accounts.platform, "Facebook"));
-        for (const o of others) {
-          if (o.id !== row.id && o.selected === 1) {
-            await db
-              .update(schema.accounts)
-              .set({ selected: 0 })
-              .where(eq(schema.accounts.id, o.id));
-          }
-        }
-      }
+
       await db
         .update(schema.accounts)
         .set({ selected: args.selected ? 1 : 0 })
@@ -118,8 +103,39 @@ export const accountActions = {
       return {
         ok: true,
         message: args.selected
-          ? `Đã chọn dùng ${row.platform} — ${row.name}.`
-          : `Đã bỏ chọn ${row.platform} — ${row.name}.`,
+          ? `Đã chọn tài khoản ${row.platform} — ${row.name} làm tài khoản đang sử dụng.`
+          : `Đã bỏ chọn tài khoản ${row.platform} — ${row.name}.`,
+      };
+    },
+  }),
+
+  setAccountSessionStatus: defineAction({
+    request: z.object({
+      id: z.number().int().positive(),
+      status: z.enum(["logged_in", "expired", "checkpoint"]),
+    }),
+    response: z.object({ ok: z.boolean(), message: z.string() }),
+    async handler(ctx, args) {
+      const db = ctx.db<typeof schema>();
+      const [row] = await db
+        .select()
+        .from(schema.accounts)
+        .where(eq(schema.accounts.id, args.id));
+      if (!row) return { ok: false, message: "Không tìm thấy tài khoản." };
+      await setSetting(db, `account_session_${args.id}`, args.status);
+      await db
+        .update(schema.accounts)
+        .set({ linked: args.status === "logged_in" ? 1 : 0 })
+        .where(eq(schema.accounts.id, args.id));
+      ctx.invalidateQueries();
+      const statusLabels: Record<string, string> = {
+        logged_in: "Đã đăng nhập",
+        expired: "Hết phiên",
+        checkpoint: "Cần xác minh",
+      };
+      return {
+        ok: true,
+        message: `Đã cập nhật phiên đăng nhập của ${row.name}: ${statusLabels[args.status]}.`,
       };
     },
   }),
@@ -188,6 +204,8 @@ export const accountActions = {
       await db
         .delete(schema.accounts)
         .where(eq(schema.accounts.id, args.id));
+      // Dọn dẹp dữ liệu session thừa trong bảng settings
+      await deleteSetting(db, `account_session_${args.id}`);
       ctx.invalidateQueries();
       return { ok: true };
     },

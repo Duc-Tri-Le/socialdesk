@@ -4,6 +4,7 @@ import { api } from "../../api";
 import type { Run } from "../../types";
 import { btnPrimary, btnDanger, inputCls, labelCls } from "../../utils/styles";
 import { fmtDate } from "../../utils/format";
+import { CollapsibleCard } from "../ui";
 
 export function ResearchSection() {
   const queryClient = useQueryClient();
@@ -59,18 +60,22 @@ export function ResearchSection() {
 
   return (
     <div className="space-y-6">
-      <section aria-label="Ghi kết quả nghiên cứu">
-        <h2 className="text-lg font-bold">Ghi kết quả nghiên cứu</h2>
-        <p className="mt-1 text-sm text-[var(--dim)]">
-          Lượt quét Marketplace/hội nhóm chạy bằng tool Social Desk trên máy
-          của bạn (hoặc nhờ Muse quét hộ) — ghi lại số liệu ở đây để đối
-          chiếu khi định giá. Giá trích tự động có thể sai, kiểm tra tay trước
-          khi đưa vào bài đăng.
-        </p>
+      <CollapsibleCard
+        as="section"
+        title="Ghi kết quả nghiên cứu"
+        subtitle="Lượt quét Marketplace/hội nhóm — ghi số liệu để đối chiếu khi định giá"
+        defaultOpen={true}
+      >
         <form
           onSubmit={submit}
-          className="mt-3 space-y-3 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] p-4"
+          className="space-y-3 p-4"
         >
+          <p className="text-xs leading-5 text-[var(--dim)]">
+            Lượt quét Marketplace/hội nhóm chạy bằng tool Social Desk trên máy
+            của bạn (hoặc nhờ Muse quét hộ) — ghi lại số liệu ở đây để đối
+            chiếu khi định giá. Giá trích tự động có thể sai, kiểm tra tay trước
+            khi đưa vào bài đăng.
+          </p>
           <div>
             <label className={labelCls} htmlFor="rq-query">Từ khóa sản phẩm</label>
             <input
@@ -118,7 +123,7 @@ export function ResearchSection() {
             Lưu kết quả nghiên cứu
           </button>
         </form>
-      </section>
+      </CollapsibleCard>
 
       <section aria-label="Các lượt nghiên cứu đã lưu">
         <h2 className="text-lg font-bold">Các lượt đã chạy</h2>

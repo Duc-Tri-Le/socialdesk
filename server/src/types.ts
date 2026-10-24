@@ -42,6 +42,9 @@ export const accountOut = z.object({
   linked: z.boolean(),
   selected: z.boolean(),
   extension_code: z.string().default(""),
+  session_status: z
+    .enum(["logged_in", "expired", "checkpoint"])
+    .default("logged_in"),
 });
 
 export type AccountRow = typeof schema.accounts.$inferSelect;
@@ -49,7 +52,7 @@ export type AccountRow = typeof schema.accounts.$inferSelect;
 // Link mở thẳng tới trang của tài khoản khi người dùng bấm vào nick:
 // - Ưu tiên link trang cá nhân đã lưu (profile_url).
 // - Instagram: suy ra từ username dạng @… ở tên/ghi chú.
-// - Facebook đang đăng nhập (đã liên kết + đang chọn dùng): facebook.com/me
+// - Facebook đang đăng nhập (đã liên kết): facebook.com/me
 //   tự chuyển tới đúng trang cá nhân của nick đang đăng nhập trên trình duyệt.
 // Ngoài các trường hợp trên trả "" — giao diện hiện ô nhập link để bổ sung.
 export function deriveProfileUrl(r: AccountRow): string {
@@ -62,11 +65,20 @@ export function deriveProfileUrl(r: AccountRow): string {
       return `https://www.instagram.com/${username}/`;
     return "";
   }
-  if (r.linked === 1 && r.selected === 1) return "https://www.facebook.com/me";
+  if (r.linked === 1) return "https://www.facebook.com/me";
   return "";
 }
 
-export function toAccountOut(r: AccountRow): z.infer<typeof accountOut> {
+export function toAccountOut(
+  r: AccountRow,
+  sessionStatus?: string,
+): z.infer<typeof accountOut> {
+  const status: "logged_in" | "expired" | "checkpoint" =
+    sessionStatus === "logged_in" || sessionStatus === "expired" || sessionStatus === "checkpoint"
+      ? sessionStatus
+      : r.linked === 1
+        ? "logged_in"
+        : "expired";
   return {
     id: r.id,
     platform: r.platform,
@@ -76,6 +88,7 @@ export function toAccountOut(r: AccountRow): z.infer<typeof accountOut> {
     linked: r.linked === 1,
     selected: r.selected === 1,
     extension_code: (r as any).extensionCode ?? "",
+    session_status: status,
   };
 }
 
