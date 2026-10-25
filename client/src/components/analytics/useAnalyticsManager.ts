@@ -11,15 +11,42 @@ import type {
 } from "./analyticsTypes";
 import { useEngagementDashboard } from "./useEngagementDashboard";
 
+function getErrorMessage(err: unknown, fallback: string): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === "object" && err !== null && "message" in err) {
+    const msg = (err as Record<string, unknown>).message;
+    if (typeof msg === "string") return msg;
+  }
+  return fallback;
+}
+
 export function useAnalyticsManager() {
   const queryClient = useQueryClient();
 
-  // 1. Quản lý Sub-Tab trong mục Phân tích (6 màn hình chính)
-  const [activeTab, setActiveTab] = useState<AnalyticsSubTab>("overview");
+  // 1. Quản lý Sub-Tab trong mục Phân tích (6 trang con chính)
+  const [activeTab, setActiveTabState] = useState<AnalyticsSubTab>(() => {
+    try {
+      const saved = localStorage.getItem("socialdesk_analytics_subtab") as AnalyticsSubTab;
+      if (
+        saved &&
+        ["overview", "ranking", "channels", "directives"].includes(saved)
+      ) {
+        return saved;
+      }
+    } catch {}
+    return "overview";
+  });
 
-  // 2. Trạng thái phân trang máy chủ & bộ lọc cho màn hình Lượt đăng (PublishPostsTab)
+  const setActiveTab = (tab: AnalyticsSubTab) => {
+    setActiveTabState(tab);
+    try {
+      localStorage.setItem("socialdesk_analytics_subtab", tab);
+    } catch {}
+  };
+
+  // 2. Trạng thái tải chỉ số cho toàn bộ màn hình phân tích (mặc định lấy 200 bản ghi để phân tích đầy đủ)
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [pageSize, setPageSize] = useState(200);
   const [searchKeyword, setSearchKeyword] = useState("");
   const [channelFilter, setChannelFilter] = useState<"all" | ChannelType>("all");
   const [postStatusFilter, setPostStatusFilter] = useState<"all" | PostStatus>("all");
@@ -126,45 +153,45 @@ export function useAnalyticsManager() {
       setFeedback({ text: "Đã cập nhật trạng thái bài Facebook.", type: "success" });
       refreshAll();
     },
-    onError: (err: any) => {
-      setFeedback({ text: err?.message || "Lỗi cập nhật trạng thái.", type: "error" });
+    onError: (err: unknown) => {
+      setFeedback({ text: getErrorMessage(err, "Lỗi cập nhật trạng thái."), type: "error" });
     },
   });
 
   const batchUpdateStatusMutation = useMutation({
     mutationFn: ({ ids, status }: { ids: number[]; status: PostStatus }) =>
       api.batchUpdatePostStatus({ ids, post_status: status }),
-    onSuccess: (res) => {
+    onSuccess: (res: { updated_count?: number } | undefined) => {
       setFeedback({
-        text: `Đã cập nhật trạng thái cho ${res.updated_count} bài đăng đã chọn.`,
+        text: `Đã cập nhật trạng thái cho ${res?.updated_count ?? 0} bài đăng đã chọn.`,
         type: "success",
       });
       refreshAll();
     },
-    onError: (err: any) => {
-      setFeedback({ text: err?.message || "Lỗi cập nhật trạng thái hàng loạt.", type: "error" });
+    onError: (err: unknown) => {
+      setFeedback({ text: getErrorMessage(err, "Lỗi cập nhật trạng thái hàng loạt."), type: "error" });
     },
   });
 
   const batchDeleteMutation = useMutation({
     mutationFn: (ids: number[]) => api.batchDeletePostMetrics({ ids }),
-    onSuccess: (res) => {
-      setFeedback({ text: `Đã xóa ${res.deleted_count} bài đăng đã chọn.`, type: "info" });
+    onSuccess: (res: { deleted_count?: number } | undefined) => {
+      setFeedback({ text: `Đã xóa ${res?.deleted_count ?? 0} bài đăng đã chọn.`, type: "info" });
       refreshAll();
     },
-    onError: (err: any) => {
-      setFeedback({ text: err?.message || "Lỗi xóa hàng loạt bài đăng.", type: "error" });
+    onError: (err: unknown) => {
+      setFeedback({ text: getErrorMessage(err, "Lỗi xóa hàng loạt bài đăng."), type: "error" });
     },
   });
 
   const batchScanMutation = useMutation({
     mutationFn: (ids: number[]) => api.batchScanPostMetrics({ metric_ids: ids }),
-    onSuccess: (res) => {
-      setFeedback({ text: res.message, type: "success" });
+    onSuccess: (res: { message?: string } | undefined) => {
+      setFeedback({ text: res?.message ?? "Quét hàng loạt thành công.", type: "success" });
       refreshAll();
     },
-    onError: (err: any) => {
-      setFeedback({ text: err?.message || "Lỗi quét hàng loạt qua Extension.", type: "error" });
+    onError: (err: unknown) => {
+      setFeedback({ text: getErrorMessage(err, "Lỗi quét hàng loạt qua Extension."), type: "error" });
     },
   });
 
@@ -174,8 +201,8 @@ export function useAnalyticsManager() {
       setFeedback({ text: "Đã xóa bài đăng khỏi danh sách.", type: "info" });
       refreshAll();
     },
-    onError: (err: any) => {
-      setFeedback({ text: err?.message || "Lỗi khi xóa bài đăng.", type: "error" });
+    onError: (err: unknown) => {
+      setFeedback({ text: getErrorMessage(err, "Lỗi khi xóa bài đăng."), type: "error" });
     },
   });
 
@@ -194,19 +221,22 @@ export function useAnalyticsManager() {
       setEditingId(null);
       refreshAll();
     },
-    onError: (err: any) => {
-      setFeedback({ text: err?.message || "Lỗi cập nhật chỉ số bán hàng.", type: "error" });
+    onError: (err: unknown) => {
+      setFeedback({ text: getErrorMessage(err, "Lỗi cập nhật chỉ số bán hàng."), type: "error" });
     },
   });
 
   const syncPublishedMutation = useMutation({
     mutationFn: () => api.syncPublishedPostsToMetrics({}),
-    onSuccess: (res) => {
-      setFeedback({ text: res.message, type: "success" });
+    onSuccess: (res: { message?: string } | undefined) => {
+      setFeedback({ text: res?.message ?? "Đồng bộ bài đăng thành công.", type: "success" });
       refreshAll();
     },
-    onError: (err: any) => {
-      setFeedback({ text: err?.message || "Không thể đồng bộ bài đăng từ Hàng đợi.", type: "error" });
+    onError: (err: unknown) => {
+      setFeedback({
+        text: getErrorMessage(err, "Không thể đồng bộ bài đăng từ Hàng đợi."),
+        type: "error",
+      });
     },
   });
 
@@ -215,15 +245,19 @@ export function useAnalyticsManager() {
       api.scanPostMetricsViaExtension({
         metric_id: typeof metricId === "number" ? metricId : undefined,
       }),
-    onSuccess: (res) => {
+    onSuccess: (res: { updated_count?: number; message?: string } | undefined) => {
+      const updatedCount = res?.updated_count ?? 0;
       setFeedback({
-        text: res.message,
-        type: res.updated_count > 0 ? "success" : "info",
+        text: res?.message ?? "Quét chỉ số bài đăng hoàn tất.",
+        type: updatedCount > 0 ? "success" : "info",
       });
       refreshAll();
     },
-    onError: (err: any) => {
-      setFeedback({ text: err?.message || "Lỗi khi quét tương tác qua Extension.", type: "error" });
+    onError: (err: unknown) => {
+      setFeedback({
+        text: getErrorMessage(err, "Lỗi khi quét tương tác qua Extension."),
+        type: "error",
+      });
     },
   });
 

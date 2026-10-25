@@ -46,6 +46,12 @@ export function ComposeMediaPicker({
                   alt={`Ảnh ${im.name}`}
                   className="h-full w-full object-cover"
                   loading="lazy"
+                  onError={(e) => {
+                    const target = e.currentTarget;
+                    if (im.id && !target.src.includes("google.com")) {
+                      target.src = `https://drive.google.com/thumbnail?id=${im.id}&sz=w800`;
+                    }
+                  }}
                 />
               </div>
               <button
@@ -109,6 +115,12 @@ export function ComposeMediaPicker({
                     alt={`Ảnh ${im.name}`}
                     className="h-full w-full object-cover"
                     loading="lazy"
+                    onError={(e) => {
+                      const target = e.currentTarget;
+                      if (im.id && !target.src.includes("google.com")) {
+                        target.src = `https://drive.google.com/thumbnail?id=${im.id}&sz=w800`;
+                      }
+                    }}
                   />
                 </div>
                 <p className="mt-0.5 truncate text-[10px] text-[var(--dim)]" title={im.name}>

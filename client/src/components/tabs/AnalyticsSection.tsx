@@ -2,19 +2,15 @@ import { useMemo } from "react";
 import {
   useAnalyticsManager,
   OverviewTab,
-  FacebookGroupsTab,
-  ContentProductsTab,
-  PublishPostsTab,
-  OptimalSlotsTab,
-  SyncScanTab,
+  RankedPostsSection,
+  ChannelSlotComparisonSection,
+  NextActionDirectivesSection,
   type AnalyticsSubTab,
 } from "../analytics";
 import { FeedbackBanner } from "../ui";
-import { cardCls } from "../../utils/styles";
 
 interface NavModuleItem {
   id: AnalyticsSubTab;
-  icon: string;
   title: string;
   subtitle: string;
   count?: number;
@@ -32,117 +28,66 @@ export function AnalyticsSection({ onGoQueue }: { onGoQueue: () => void }) {
     isDashboardFetching,
     dashboardFilters,
     filterOptions,
-    isScoringModalOpen,
-    setIsScoringModalOpen,
     onFilterChange,
     onResetFilters,
-    onSaveWeights,
-    isSavingWeights,
-    refetchDashboard,
+    refreshAll,
 
-    // Queries & Legacy Shortcuts
-    groups,
-    products,
+    // Metrics Data
     metrics,
     total,
-    page,
-    pageSize,
-    totalPages,
     analytics,
-    heatmap,
-    isHeatmapLoading,
-    onlineExtensionCodes,
-    groupAnalyticsQ,
-    productTreeQ,
-    metricsQ,
-    analyticsQ,
-
-    // Filters & Pagination for Posts Tab
-    searchKeyword,
-    onSearchChange,
-    channelFilter,
-    onChannelFilterChange,
-    postStatusFilter,
-    onPostStatusFilterChange,
-    startDate,
-    onStartDateChange,
-    endDate,
-    onEndDateChange,
-    onPageChange,
-    onPageSizeChange,
 
     // Feedback
     feedback,
     setFeedback,
 
-    // Sales Edit
-    editingId,
-    editSalesForm,
-    setEditSalesForm,
-    startEditSales,
-    cancelEditSales,
-    saveEditSales,
-    isSavingSales,
-
-    // Operations
-    deleteMetric,
-    updateStatus,
+    // Sync & Scan
     syncPublished,
     isSyncing,
     scanAllPosts,
     isScanning,
-    scanSingleMetric,
-    batchScan,
-    isBatchScanning,
-    batchUpdateStatus,
-    batchDelete,
   } = useAnalyticsManager();
 
-  // Danh mục 6 module điều hướng phân tích
+  // Danh mục 4 trang cốt lõi của mục Phân tích (Xóa hết các trang cũ)
   const modules: NavModuleItem[] = useMemo(
     () => [
       {
         id: "overview",
-        icon: "📊",
-        title: "Overview",
-        subtitle: "Tổng quan & KPIs",
+        title: "Tổng quan",
+        subtitle: "3 con số sức khỏe",
       },
       {
-        id: "groups",
-        icon: "👥",
-        title: "Facebook Groups",
-        subtitle: "Hiệu quả nhóm",
-        count: groups.length,
-      },
-      {
-        id: "posts",
-        icon: "📝",
-        title: "Posts",
-        subtitle: "Quản lý lượt đăng",
+        id: "ranking",
+        title: "Xếp hạng bài",
+        subtitle: "Trái tim phân tích",
         count: total,
       },
       {
-        id: "slots",
-        icon: "⏰",
-        title: "Best Posting Time",
-        subtitle: "Khung giờ tối ưu",
+        id: "channels",
+        title: "Kênh & Khung giờ vàng",
+        subtitle: "Đăng đâu, mấy giờ",
       },
       {
-        id: "content",
-        icon: "📦",
-        title: "Content Analytics",
-        subtitle: "Nội dung & Sản phẩm",
-        count: products.length,
-      },
-      {
-        id: "sync_scan",
-        icon: "🔄",
-        title: "Sync & Scan",
-        subtitle: "Đồng bộ & Quét tương tác",
+        id: "directives",
+        title: "Hướng đăng tiếp theo",
+        subtitle: "Biến phân tích thành hành động",
       },
     ],
-    [groups.length, products.length, total],
+    [total],
   );
+
+  // Ánh xạ thumbnail từ danh sách topContent
+  const thumbnailsMap = useMemo(() => {
+    const map: Record<number, string> = {};
+    if (dashboard?.topContent?.content) {
+      for (const c of dashboard.topContent.content) {
+        if (c.draftId && c.thumbnail) {
+          map[c.draftId] = c.thumbnail;
+        }
+      }
+    }
+    return map;
+  }, [dashboard?.topContent?.content]);
 
   return (
     <div className="space-y-6">
@@ -155,9 +100,12 @@ export function AnalyticsSection({ onGoQueue }: { onGoQueue: () => void }) {
         />
       )}
 
-      {/* Mobile / Tablet Compact Navigation */}
-      <div className="lg:hidden">
-        <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-none">
+      {/* Top Header Navigation: Đúng 4 trang cốt lõi */}
+      <header
+        aria-label="Thanh điều hướng 4 trang phân tích"
+        className="sticky top-[49px] z-10 -mx-1 px-1 py-2 bg-[var(--bg)]/95 backdrop-blur-md border-b border-[var(--border)] transition-all"
+      >
+        <div className="flex items-center gap-2 overflow-x-auto py-0.5 scrollbar-none sm:flex-wrap">
           {modules.map((m) => {
             const isActive = activeTab === m.id;
             return (
@@ -165,18 +113,20 @@ export function AnalyticsSection({ onGoQueue }: { onGoQueue: () => void }) {
                 key={m.id}
                 type="button"
                 onClick={() => setActiveTab(m.id)}
-                className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium transition ${
+                aria-current={isActive ? "page" : undefined}
+                className={`group flex shrink-0 items-center gap-2 rounded-full px-4 py-2 text-xs sm:text-sm font-semibold transition-all cursor-pointer whitespace-nowrap ${
                   isActive
                     ? "bg-[var(--accent)] text-white shadow-xs"
-                    : "bg-[var(--surface)] text-[var(--dim)] hover:bg-[var(--surface-alt)] hover:text-[var(--ink)] border border-[var(--border)]"
+                    : "border border-[var(--border)] bg-[var(--surface)] text-[var(--dim)] hover:text-[var(--text)] hover:border-[var(--text)] hover:bg-[var(--surface-alt)]"
                 }`}
               >
-                <span>{m.icon}</span>
                 <span>{m.title}</span>
                 {typeof m.count === "number" && m.count > 0 && (
                   <span
-                    className={`rounded-full px-1.5 py-0.2 text-[10px] font-bold ${
-                      isActive ? "bg-white/20 text-white" : "bg-[var(--surface-alt)] text-[var(--dim)]"
+                    className={`rounded-full px-1.5 py-0.2 text-[10px] font-mono font-bold ${
+                      isActive
+                        ? "bg-white/20 text-white"
+                        : "bg-[var(--surface-alt)] text-[var(--dim)] border border-[var(--border)]"
                     }`}
                   >
                     {m.count}
@@ -186,156 +136,56 @@ export function AnalyticsSection({ onGoQueue }: { onGoQueue: () => void }) {
             );
           })}
         </div>
-      </div>
+      </header>
 
-      {/* Main Layout: Desktop Sidebar + Content */}
-      <div className="flex flex-col lg:flex-row lg:items-start lg:gap-6">
-        {/* Desktop Fixed Sidebar */}
-        <aside className="hidden lg:block w-64 shrink-0 sticky top-4">
-          <nav aria-label="Sidebar điều hướng phân tích" className={`${cardCls} p-3 space-y-1 shadow-xs`}>
-            <div className="px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-[var(--dim)] border-b border-[var(--border)] mb-2">
-              Performance Center
-            </div>
-            {modules.map((m) => {
-              const isActive = activeTab === m.id;
-              return (
-                <button
-                  key={m.id}
-                  type="button"
-                  onClick={() => setActiveTab(m.id)}
-                  className={`w-full flex items-center justify-between rounded-lg px-3 py-2.5 text-left text-xs transition ${
-                    isActive
-                      ? "bg-[var(--accent)] text-white font-semibold shadow-xs"
-                      : "text-[var(--ink)] hover:bg-[var(--surface-alt)]"
-                  }`}
-                >
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <span className="text-base shrink-0">{m.icon}</span>
-                    <div className="min-w-0">
-                      <div className="truncate">{m.title}</div>
-                      <div
-                        className={`text-[10px] truncate ${
-                          isActive ? "text-white/80" : "text-[var(--dim)]"
-                        }`}
-                      >
-                        {m.subtitle}
-                      </div>
-                    </div>
-                  </div>
-                  {typeof m.count === "number" && m.count > 0 && (
-                    <span
-                      className={`ml-2 rounded-full px-2 py-0.5 text-[10px] font-mono font-bold shrink-0 ${
-                        isActive
-                          ? "bg-white/20 text-white"
-                          : "bg-[var(--surface-alt)] text-[var(--dim)] border border-[var(--border)]"
-                      }`}
-                    >
-                      {m.count}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </nav>
-        </aside>
+      {/* Nội dung 4 trang cốt lõi (Xóa bỏ các trang cũ) */}
+      <div className="w-full min-w-0">
+        {/* TRANG 1: HÀNG TỔNG QUAN — 3 CON SỐ (KHÔNG BIỂU ĐỒ DÀI DÒNG) */}
+        {activeTab === "overview" && (
+          <OverviewTab
+            dashboard={dashboard}
+            isLoading={isDashboardLoading}
+            filters={dashboardFilters}
+            filterOptions={filterOptions}
+            onFilterChange={onFilterChange}
+            onResetFilters={onResetFilters}
+            onRefresh={refreshAll}
+            isRefreshing={isDashboardFetching}
+            onSync={syncPublished}
+            isSyncing={isSyncing}
+            onScan={scanAllPosts}
+            isScanning={isScanning}
+            onNavigateTab={setActiveTab}
+            metrics={metrics}
+          />
+        )}
 
-        {/* Tab Content Area */}
-        <main className="flex-1 min-w-0">
-          {activeTab === "overview" && (
-            <OverviewTab
-              dashboard={dashboard}
-              isLoading={isDashboardLoading}
-              filters={dashboardFilters}
-              filterOptions={filterOptions}
-              onFilterChange={onFilterChange}
-              onResetFilters={onResetFilters}
-              onRefresh={refetchDashboard}
-              isRefreshing={isDashboardFetching}
-              onSync={syncPublished}
-              isSyncing={isSyncing}
-              onScan={scanAllPosts}
-              isScanning={isScanning}
-              onNavigateTab={setActiveTab}
-              isScoringModalOpen={isScoringModalOpen}
-              onOpenScoringModal={() => setIsScoringModalOpen(true)}
-              onCloseScoringModal={() => setIsScoringModalOpen(false)}
-              onSaveWeights={onSaveWeights}
-              isSavingWeights={isSavingWeights}
-            />
-          )}
+        {/* TRANG 2: BẢNG XẾP HẠNG BÀI — TRÁI TIM CỦA MỤC NÀY */}
+        {activeTab === "ranking" && (
+          <RankedPostsSection
+            metrics={metrics}
+            onNavigate={setActiveTab}
+            thumbnailsMap={thumbnailsMap}
+          />
+        )}
 
-          {activeTab === "groups" && (
-            <FacebookGroupsTab
-              groups={groups}
-              isLoading={groupAnalyticsQ.isPending}
-            />
-          )}
+        {/* TRANG 3: SO SÁNH KÊNH + KHUNG GIỜ VÀNG — TRẢ LỜI "ĐĂNG ĐÂU, MẤY GIỜ" */}
+        {activeTab === "channels" && (
+          <ChannelSlotComparisonSection
+            analytics={analytics}
+            metrics={metrics}
+          />
+        )}
 
-          {activeTab === "content" && (
-            <ContentProductsTab
-              products={products}
-              isLoading={productTreeQ.isPending}
-            />
-          )}
-
-          {activeTab === "posts" && (
-            <PublishPostsTab
-              metrics={metrics}
-              total={total}
-              page={page}
-              pageSize={pageSize}
-              totalPages={totalPages}
-              onPageChange={onPageChange}
-              onPageSizeChange={onPageSizeChange}
-              isLoading={metricsQ.isPending}
-              searchKeyword={searchKeyword}
-              onSearchChange={onSearchChange}
-              channelFilter={channelFilter}
-              onChannelFilterChange={onChannelFilterChange}
-              postStatusFilter={postStatusFilter}
-              onPostStatusFilterChange={onPostStatusFilterChange}
-              startDate={startDate}
-              onStartDateChange={onStartDateChange}
-              endDate={endDate}
-              onEndDateChange={onEndDateChange}
-              editingId={editingId}
-              editSalesForm={editSalesForm}
-              setEditSalesForm={setEditSalesForm}
-              startEditSales={startEditSales}
-              cancelEditSales={cancelEditSales}
-              saveEditSales={saveEditSales}
-              isSavingSales={isSavingSales}
-              onDeleteMetric={deleteMetric}
-              onScanSingleMetric={scanSingleMetric}
-              onUpdateStatus={updateStatus}
-              onBatchScan={batchScan}
-              isBatchScanning={isBatchScanning}
-              onBatchUpdateStatus={batchUpdateStatus}
-              onBatchDelete={batchDelete}
-            />
-          )}
-
-          {activeTab === "slots" && (
-            <OptimalSlotsTab
-              analytics={analytics}
-              isLoading={analyticsQ.isPending}
-              heatmap={heatmap}
-              isHeatmapLoading={isHeatmapLoading}
-              onGoQueue={onGoQueue}
-            />
-          )}
-
-          {activeTab === "sync_scan" && (
-            <SyncScanTab
-              onSyncPublished={syncPublished}
-              isSyncing={isSyncing}
-              onScanExtension={scanAllPosts}
-              isScanning={isScanning}
-              onGoQueue={onGoQueue}
-              onlineExtensionCodes={onlineExtensionCodes}
-            />
-          )}
-        </main>
+        {/* TRANG 4: "HƯỚNG ĐĂNG TIẾP THEO" — PHẦN BIẾN PHÂN TÍCH THÀNH HÀNH ĐỘNG */}
+        {activeTab === "directives" && (
+          <NextActionDirectivesSection
+            metrics={metrics}
+            analytics={analytics}
+            onNavigate={setActiveTab}
+            onGoQueue={onGoQueue}
+          />
+        )}
       </div>
     </div>
   );

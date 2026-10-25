@@ -36,6 +36,12 @@ export function DriveImageStrip({
                 alt={`Ảnh thật ${im.name} của ${label}`}
                 className="h-16 w-20 rounded-[var(--radius)] border border-[var(--border)] object-cover"
                 loading="lazy"
+                onError={(e) => {
+                  const target = e.currentTarget;
+                  if (im.id && !target.src.includes("google.com")) {
+                    target.src = `https://drive.google.com/thumbnail?id=${im.id}&sz=w800`;
+                  }
+                }}
               />
             </a>
             <p className="mt-0.5 truncate text-[10px] text-[var(--dim)]" title={im.name}>

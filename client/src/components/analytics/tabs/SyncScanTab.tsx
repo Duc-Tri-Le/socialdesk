@@ -79,9 +79,8 @@ export const SyncScanTab = memo(function SyncScanTab({
               <h3 className="font-bold text-[var(--ink)]">Chrome Extension Connector</h3>
               <div className="flex items-center gap-2 mt-0.5">
                 <span
-                  className={`inline-block h-2 w-2 rounded-full ${
-                    isExtensionConnected ? "bg-emerald-500 animate-pulse" : "bg-rose-500"
-                  }`}
+                  className={`inline-block h-2 w-2 rounded-full ${isExtensionConnected ? "bg-emerald-500 animate-pulse" : "bg-rose-500"
+                    }`}
                 />
                 <span className="text-xs font-semibold text-[var(--ink)]">
                   {isExtensionConnected

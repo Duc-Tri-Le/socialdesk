@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { api } from "../../api";
 import type { DashboardFilters, ProductContentTree } from "./analyticsTypes";
 
@@ -23,11 +23,8 @@ interface UseEngagementDashboardProps {
 
 export function useEngagementDashboard({
   products = [],
-  onFeedback,
 }: UseEngagementDashboardProps = {}) {
-  const queryClient = useQueryClient();
   const [filters, setFilters] = useState<DashboardFilters>(DEFAULT_FILTERS);
-  const [isScoringModalOpen, setIsScoringModalOpen] = useState(false);
 
   // 1. Query danh sách nhóm Facebook để luôn có đủ nhóm cho bộ lọc
   const groupsListQ = useQuery({
@@ -53,38 +50,13 @@ export function useEngagementDashboard({
         commentWeight: filters.commentWeight,
         shareWeight: filters.shareWeight,
       }),
-  });
-
-  // 3. Cập nhật trọng số tương tác vào app_settings
-  const updateWeightsMutation = useMutation({
-    mutationFn: (weights: {
-      reactionWeight: number;
-      commentWeight: number;
-      shareWeight: number;
-    }) => api.updateAnalyticsWeights(weights),
-    onSuccess: (res, variables) => {
-      onFeedback?.({ text: res.message, type: "success" });
-      setFilters((prev) => ({
-        ...prev,
-        reactionWeight: variables.reactionWeight,
-        commentWeight: variables.commentWeight,
-        shareWeight: variables.shareWeight,
-      }));
-      setIsScoringModalOpen(false);
-      queryClient.invalidateQueries({ queryKey: ["engagement-dashboard"] });
-    },
-    onError: (err: any) => {
-      onFeedback?.({
-        text: err?.message || "Lỗi lưu cấu hình trọng số.",
-        type: "error",
-      });
-    },
+    placeholderData: keepPreviousData,
   });
 
   // 4. Trích xuất danh sách options cho bộ lọc toàn cục
   const filterOptions = useMemo(() => {
     const rawGroups = groupsListQ.data?.groups ?? [];
-    const groupOpts = rawGroups.map((g) => ({
+    const groupOpts = rawGroups.map((g: { id: number; name?: string }) => ({
       id: g.id,
       name: g.name || `Nhóm #${g.id}`,
     }));
@@ -96,9 +68,15 @@ export function useEngagementDashboard({
     const variants: Array<{ id: number; label: string; productName: string }> = [];
     products.forEach((p) => {
       p.drafts?.forEach((d) => {
+        const snippet = d.caption
+          ? d.caption.replace(/\s+/g, " ").trim().slice(0, 45) + (d.caption.length > 45 ? "…" : "")
+          : "";
+        const tag = d.stt ? `Mã ${d.stt}` : `Bản #${d.draft_id}`;
+        const label = snippet ? `${tag}: "${snippet}"` : `${tag} - Bản #${d.draft_id}`;
+
         variants.push({
           id: d.draft_id,
-          label: d.angle || d.caption || `Bản thảo #${d.draft_id}`,
+          label,
           productName: p.product_name,
         });
       });
@@ -113,19 +91,12 @@ export function useEngagementDashboard({
 
   // 5. Các hàm thao tác
   const handleFilterChange = useCallback((updated: Partial<DashboardFilters>) => {
-    setFilters((prev) => ({ ...prev, ...updated }));
+    setFilters((prev: DashboardFilters) => ({ ...prev, ...updated }));
   }, []);
 
   const handleResetFilters = useCallback(() => {
     setFilters(DEFAULT_FILTERS);
   }, []);
-
-  const handleSaveWeights = useCallback(
-    (weights: { reactionWeight: number; commentWeight: number; shareWeight: number }) => {
-      updateWeightsMutation.mutate(weights);
-    },
-    [updateWeightsMutation],
-  );
 
   return {
     dashboard: dashboardQ.data,
@@ -134,12 +105,8 @@ export function useEngagementDashboard({
     dashboardFilters: filters,
     setDashboardFilters: setFilters,
     filterOptions,
-    isScoringModalOpen,
-    setIsScoringModalOpen,
     onFilterChange: handleFilterChange,
     onResetFilters: handleResetFilters,
-    onSaveWeights: handleSaveWeights,
-    isSavingWeights: updateWeightsMutation.isPending,
     refetchDashboard: dashboardQ.refetch,
   };
 }

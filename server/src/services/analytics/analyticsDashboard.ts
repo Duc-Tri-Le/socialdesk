@@ -43,11 +43,18 @@ export async function buildEngagementDashboard(
   for (const m of allMetrics) {
     if (m.productName) productSet.add(m.productName);
   }
-  const variantOptions = allDrafts.map((d) => ({
-    id: d.id,
-    label: d.sku || `#${d.stt || d.id} ${d.productName}`,
-    productName: d.productName,
-  }));
+  const variantOptions = allDrafts.map((d) => {
+    const snippet = d.caption
+      ? d.caption.replace(/\s+/g, " ").trim().slice(0, 45) + (d.caption.length > 45 ? "…" : "")
+      : "";
+    const tag = d.stt ? `Mã ${d.stt}` : `Bản #${d.id}`;
+    const label = snippet ? `${tag}: "${snippet}"` : (d.sku || `${tag} - ${d.productName}`);
+    return {
+      id: d.id,
+      label,
+      productName: d.productName,
+    };
+  });
 
   const groupIds = Array.isArray(filters.groupIds) ? filters.groupIds : [];
   const productName = filters.productName || "";
@@ -201,8 +208,8 @@ export async function buildEngagementDashboard(
       id: "rec_top_group",
       type: "top_group",
       title: `Nhóm nổi bật: "${topG.groupName}"`,
-      description: `Nhóm đạt điểm tương tác bình quân cao nhất (${topG.avgWeightedEngagement} WE) với ${topG.totalPosts} bài đăng.`,
-      evidence: `${topG.totalPosts} bài đo lường, WE TB: ${topG.avgWeightedEngagement}`,
+      description: `Nhóm đạt lượt tương tác bình quân cao nhất (${topG.avgEngagement} lượt/bài) với ${topG.totalPosts} bài đăng.`,
+      evidence: `${topG.totalPosts} bài đo lường, tương tác TB: ${topG.avgEngagement} lượt/bài`,
       confidence: "high",
       actionTarget: "groups",
       actionLabel: "Xem nhóm",
@@ -214,7 +221,7 @@ export async function buildEngagementDashboard(
       id: "rec_top_content",
       type: "top_content",
       title: `Nội dung dẫn đầu: ${topC.productName}`,
-      description: `Phiên bản "${topC.variantLabel}" được đăng trên ${topC.groupsCount} nhóm với ${topC.avgWeightedEngagement} WE trung bình.`,
+      description: `Phiên bản "${topC.variantLabel}" được đăng trên ${topC.groupsCount} nhóm với ${topC.avgEngagement} lượt tương tác trung bình mỗi bài.`,
       evidence: `${topC.postsCount} lượt đăng thực tế`,
       confidence: topC.postsCount >= 3 ? "high" : "low",
       actionTarget: "content",

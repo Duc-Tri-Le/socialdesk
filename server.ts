@@ -86,6 +86,7 @@ const server = Bun.serve<ExtensionWsData>({
     if (url.pathname === "/api/extensions") {
       return new Response(
         JSON.stringify({
+          online: Array.from(extensionSockets.keys()),
           onlineCodes: Array.from(extensionSockets.keys()),
         }),
         {
@@ -148,6 +149,43 @@ const server = Bun.serve<ExtensionWsData>({
       if (await file.exists()) {
         return new Response(file);
       }
+
+      // Tự động tải từ Google Drive về bộ nhớ tạm nếu file chưa có trên đĩa
+      const match = url.pathname.match(/\/uploads\/drive\/[^_]+_([a-zA-Z0-9_-]+)\.(?:jpg|jpeg|png)$/i);
+      if (match && match[1]) {
+        const fileId = match[1];
+        try {
+          const driveUrls = [
+            `https://lh3.googleusercontent.com/d/${fileId}=w1600`,
+            `https://drive.google.com/thumbnail?id=${fileId}&sz=w1600`,
+          ];
+          for (const dUrl of driveUrls) {
+            const resp = await fetch(dUrl, {
+              headers: {
+                "User-Agent":
+                  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+              },
+            });
+            if (resp.ok) {
+              const buf = Buffer.from(await resp.arrayBuffer());
+              if (buf.length > 1024) {
+                const dir = path.dirname(filePath);
+                if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+                fs.writeFileSync(filePath, buf);
+                return new Response(buf, {
+                  headers: {
+                    "Content-Type": "image/jpeg",
+                    "Cache-Control": "public, max-age=86400",
+                  },
+                });
+              }
+            }
+          }
+        } catch (e) {
+          console.error(`[Server uploads/drive fetch error]:`, e);
+        }
+      }
+
       return new Response("Not found", { status: 404 });
     }
 

@@ -6,11 +6,15 @@ import { displayImageSrc, driveStatusLabel, isDriveFolderLink } from "../../util
 // thì hiện ảnh JPEG đầu tiên, chưa có ảnh thì hiện trạng thái rõ ràng.
 export function ProductThumb({ product }: { product: Product }) {
   const [failed, setFailed] = useState(false);
+  const [fallbackSrc, setFallbackSrc] = useState<string | null>(null);
   const firstDrive = product.drive_images[0];
-  const src = product.has_real_image && firstDrive ? firstDrive.jpeg_url : displayImageSrc(product.image_url);
+  const src = fallbackSrc || (product.has_real_image && firstDrive ? firstDrive.jpeg_url : displayImageSrc(product.image_url));
+
   useEffect(() => {
     setFailed(false);
-  }, [src]);
+    setFallbackSrc(null);
+  }, [product.image_url, firstDrive?.jpeg_url]);
+
   if (isDriveFolderLink(product.image_url) && !product.has_real_image) {
     return (
       <div
@@ -52,7 +56,13 @@ export function ProductThumb({ product }: { product: Product }) {
       alt={`Ảnh sản phẩm ${product.name}`}
       className="h-14 w-14 shrink-0 rounded-[var(--radius)] object-cover"
       loading="lazy"
-      onError={() => setFailed(true)}
+      onError={() => {
+        if (!fallbackSrc && firstDrive?.id) {
+          setFallbackSrc(`https://drive.google.com/thumbnail?id=${firstDrive.id}&sz=w800`);
+        } else {
+          setFailed(true);
+        }
+      }}
     />
   );
 }

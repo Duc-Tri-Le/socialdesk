@@ -37,11 +37,9 @@ export type PostStatus = "active" | "pending_approval" | "removed";
 
 export type AnalyticsSubTab =
   | "overview"
-  | "groups"
-  | "content"
-  | "posts"
-  | "slots"
-  | "sync_scan";
+  | "ranking"
+  | "channels"
+  | "directives";
 
 export interface QuickEditSalesData {
   id: number;

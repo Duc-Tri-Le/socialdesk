@@ -82,7 +82,7 @@ export function computeTopGroups(
       eligiblePostsCount: s.totalPosts,
     };
   });
-  topGroupList.sort((a, b) => b.avgWeightedEngagement - a.avgWeightedEngagement);
+  topGroupList.sort((a, b) => b.avgEngagement - a.avgEngagement);
   topGroupList.forEach((g, idx) => (g.rank = idx + 1));
   return topGroupList;
 }
@@ -115,7 +115,14 @@ export function computeTopContent(
     if (!entry) {
       const d = allDrafts.find((item) => item.id === draftId);
       const thumbnail = d ? extractThumbnail(d.driveImages, d.imageUrl) : "";
-      const label = d?.sku ? d.sku : `#${p.stt || draftId} ${p.productName}`;
+      const captionSnippet = d?.caption
+        ? d.caption.replace(/\s+/g, " ").trim().slice(0, 45) + (d.caption.length > 45 ? "…" : "")
+        : "";
+      const label = d?.sku
+        ? d.sku
+        : captionSnippet
+          ? `#${p.stt || draftId}: "${captionSnippet}"`
+          : `#${p.stt || draftId} ${p.productName}`;
       entry = {
         productName: p.productName || d?.productName || "Sản phẩm",
         variantLabel: label,
@@ -137,7 +144,7 @@ export function computeTopContent(
     const gKey = p.channelName || "Chưa rõ";
     entry.bestGroupCounts.set(
       gKey,
-      (entry.bestGroupCounts.get(gKey) || 0) + (p.likes + p.comments * 3 + p.shares * 5),
+      (entry.bestGroupCounts.get(gKey) || 0) + (p.likes + p.comments + p.shares),
     );
   }
 
@@ -168,7 +175,7 @@ export function computeTopContent(
       bestGroupName,
     };
   });
-  topContentList.sort((a, b) => b.avgWeightedEngagement - a.avgWeightedEngagement);
+  topContentList.sort((a, b) => b.avgEngagement - a.avgEngagement);
   return topContentList;
 }
 
@@ -198,7 +205,9 @@ export function computeHeatmapRows(
       const matching = currentPosts.filter((p) => postsMatcher(p, slot));
       const cnt = matching.length;
       let sumWE = 0;
-      for (const m of matching) sumWE += computeWE(m.likes, m.comments, m.shares, wr, wc, ws);
+      for (const m of matching) {
+        sumWE += computeWE(m.likes, m.comments, m.shares, wr, wc, ws);
+      }
       const avg = cnt > 0 ? Number((sumWE / cnt).toFixed(1)) : 0;
       const tier: "none" | "low" | "medium" | "high" =
         cnt === 0 ? "none" : cnt <= 2 ? "low" : cnt <= 9 ? "medium" : "high";

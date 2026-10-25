@@ -1,5 +1,4 @@
 import { memo } from "react";
-import { btnPrimary, btnOutline } from "../../../utils/styles";
 
 interface DashboardHeaderProps {
   lastUpdated?: string;
@@ -33,58 +32,81 @@ export const DashboardHeader = memo(function DashboardHeader({
     : "Đang tải…";
 
   return (
-    <div className="flex flex-col gap-4 border-b border-[var(--border)] pb-4 sm:flex-row sm:items-center sm:justify-between">
-      {/* Tiêu đề & Subtitle */}
-      <div>
-        <div className="flex items-center gap-2">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--accent)]/10 text-lg">
-            ⚡
-          </span>
-          <h1 className="text-xl font-bold tracking-tight text-[var(--ink)] sm:text-2xl">
-            Engagement Analytics
-          </h1>
+    <div className="flex flex-col gap-4 border-b border-[var(--border)] pb-4 lg:flex-row lg:items-center lg:justify-between">
+      {/* Tiêu đề & Subtitle kèm Icon biểu đồ cam */}
+      <div className="flex items-center gap-3">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 text-amber-500 border border-amber-500/20">
+          <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2.5}
+              d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
+            />
+          </svg>
         </div>
-        <p className="mt-1 text-xs font-medium text-[var(--dim)] sm:text-sm">
-          Facebook Groups · Performance Center
-        </p>
+        <div>
+          <h1 className="text-xl font-bold tracking-tight text-[var(--ink)] sm:text-2xl">
+            Phân tích tương tác
+          </h1>
+          <p className="text-xs font-medium text-[var(--dim)] mt-0.5">
+            Hiệu quả bài đăng Facebook · Tối ưu nội dung, tăng tương tác
+          </p>
+        </div>
       </div>
 
       {/* Thông tin cập nhật & Bộ nút hành động */}
       <div className="flex flex-wrap items-center gap-2.5">
-        <div className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-1.5 text-xs text-[var(--dim)]">
-          <span className="inline-block h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+        {/* Badge Cập nhật */}
+        <div className="flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-3.5 py-1.5 text-xs text-[var(--dim)] font-mono">
+          <span className="inline-block h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
           <span>Cập nhật:</span>
-          <strong className="font-mono text-[var(--ink)]">{formattedTime}</strong>
+          <strong className="text-[var(--ink)] font-medium">{formattedTime}</strong>
+          <span className="rounded bg-[var(--surface-alt)] px-1.5 py-0.2 text-[10px] text-blue-400 font-semibold border border-[var(--border)]">
+            UTC+7
+          </span>
         </div>
 
+        {/* Nút Tải lại số liệu */}
         <button
           type="button"
           onClick={onRefresh}
           disabled={isRefreshing}
-          className={`${btnOutline} py-1.5 px-3 text-xs`}
+          className="flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface)] px-3.5 py-1.5 text-xs font-semibold text-[var(--ink)] hover:border-[var(--border-hover)] hover:bg-[var(--surface-alt)] transition cursor-pointer disabled:opacity-50"
           title="Tải lại số liệu dashboard"
         >
-          {isRefreshing ? "⏳ Đang tải…" : "🔄 Refresh Dashboard"}
+          <svg className={`h-3.5 w-3.5 ${isRefreshing ? "animate-spin" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          <span>{isRefreshing ? "Đang tải…" : "Tải lại số liệu"}</span>
         </button>
 
+        {/* Nút Đồng bộ bài đăng */}
         <button
           type="button"
           onClick={onSync}
           disabled={isSyncing}
-          className={`${btnOutline} py-1.5 px-3 text-xs`}
-          title="Đồng bộ bài đã đăng từ Hàng đợi"
+          className="flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface)] px-3.5 py-1.5 text-xs font-semibold text-[var(--ink)] hover:border-[var(--border-hover)] hover:bg-[var(--surface-alt)] transition cursor-pointer disabled:opacity-50"
+          title="Đồng bộ bài đã xuất bản từ Hàng đợi"
         >
-          {isSyncing ? "Đang đồng bộ…" : "📥 Đồng bộ bài đăng"}
+          <svg className={`h-3.5 w-3.5 ${isSyncing ? "animate-spin" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+          </svg>
+          <span>{isSyncing ? "Đang đồng bộ…" : "Đồng bộ bài đăng"}</span>
         </button>
 
+        {/* Nút Quét tương tác (Màu vàng cam nổi bật) */}
         <button
           type="button"
           onClick={onScan}
           disabled={isScanning}
-          className={`${btnPrimary} py-1.5 px-3 text-xs`}
+          className="flex items-center gap-1.5 rounded-full bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold px-4 py-1.5 text-xs transition shadow-xs cursor-pointer disabled:opacity-50"
           title="Kích hoạt Chrome Extension quét tương tác"
         >
-          {isScanning ? "Đang quét…" : "🔌 Quét tương tác"}
+          <svg className={`h-3.5 w-3.5 ${isScanning ? "animate-spin" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
+          </svg>
+          <span>{isScanning ? "Đang quét…" : "Quét tương tác"}</span>
         </button>
       </div>
     </div>

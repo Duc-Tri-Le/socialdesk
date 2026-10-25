@@ -86,7 +86,7 @@ export function AccountItemCard({
       className={`rounded-lg border transition-all duration-200 p-3 sm:p-3.5 ${
         a.selected
           ? "border-amber-400/80 shadow-[0_0_12px_rgba(251,191,36,0.12)] bg-gradient-to-b from-amber-500/[0.03] to-[var(--surface)] ring-1 ring-amber-400/30"
-          : "border-[var(--border)] bg-[var(--surface)] hover:border-zinc-700/80 hover:shadow-sm"
+          : "border-[var(--border)] bg-[var(--surface)] hover:border-[var(--border-hover)] hover:shadow-xs"
       }`}
     >
       {/* 1. Header Card */}
@@ -143,12 +143,12 @@ export function AccountItemCard({
                 </span>
               )}
               {sessionStatus === "checkpoint" && (
-                <span className="rounded bg-amber-500/15 border border-amber-500/30 px-1.5 py-0.2 text-[10px] font-semibold text-amber-400">
+                <span className="rounded bg-amber-500/15 border border-amber-500/30 px-1.5 py-0.2 text-[10px] font-semibold text-amber-500">
                   Cần xác minh
                 </span>
               )}
               {(sessionStatus === "expired" || !a.linked) && (
-                <span className="rounded bg-zinc-500/15 border border-zinc-500/30 px-1.5 py-0.2 text-[10px] font-semibold text-zinc-400">
+                <span className="rounded bg-[var(--surface-alt)] border border-[var(--border)] px-1.5 py-0.2 text-[10px] font-semibold text-[var(--dim)]">
                   Hết phiên
                 </span>
               )}
@@ -160,8 +160,8 @@ export function AccountItemCard({
           <label
             className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs cursor-pointer select-none transition-colors border ${
               a.selected
-                ? "border-amber-400/40 bg-amber-400/10 text-amber-300 font-bold"
-                : "border-[var(--border)] bg-[var(--surface-alt)] text-[var(--dim)] hover:text-[var(--text)] hover:border-zinc-600"
+                ? "border-[var(--accent)] bg-[var(--accent-subtle)] text-[var(--accent-ink)] font-bold"
+                : "border-[var(--border)] bg-[var(--surface-alt)] text-[var(--dim)] hover:text-[var(--text)] hover:border-[var(--border-hover)]"
             }`}
             title={a.selected ? "Đang chọn tài khoản này để đăng (Click để bỏ chọn)" : "Chọn làm tài khoản đăng bài"}
           >
@@ -170,7 +170,7 @@ export function AccountItemCard({
               checked={a.selected}
               onChange={() => onSelect({ id: a.id, selected: !a.selected })}
               disabled={isSelectPending}
-              className="h-3.5 w-3.5 rounded border-zinc-600 bg-zinc-800 text-amber-400 focus:ring-1 focus:ring-amber-400/50 cursor-pointer accent-amber-400"
+              className="h-3.5 w-3.5 rounded border-[var(--border)] bg-[var(--surface)] text-[var(--accent)] focus:ring-1 focus:ring-[var(--accent)]/50 cursor-pointer accent-[var(--accent)]"
             />
             <span className="text-[11px] font-semibold whitespace-nowrap">
               {a.selected ? "Đang chọn" : "Chọn"}

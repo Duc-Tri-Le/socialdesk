@@ -4,25 +4,30 @@ import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 export { z };
 
 export interface ActionDefinition<
-  TReq extends z.ZodTypeAny = any,
-  TRes extends z.ZodTypeAny = any,
+  TReq extends z.ZodTypeAny = z.ZodTypeAny,
+  TRes extends z.ZodTypeAny = z.ZodTypeAny,
 > {
   request?: TReq;
   response?: TRes;
   privileged?: any;
   handler: (
     ctx: Ctx,
-    args: TReq extends z.ZodTypeAny ? z.infer<TReq> : any,
-  ) => Promise<TRes extends z.ZodTypeAny ? z.infer<TRes> : any> | (TRes extends z.ZodTypeAny ? z.infer<TRes> : any);
+    args: z.infer<TReq>,
+  ) => Promise<z.infer<TRes>> | z.infer<TRes>;
 }
 
 export function defineAction<
-  TReq extends z.ZodTypeAny = any,
-  TRes extends z.ZodTypeAny = any,
+  TReq extends z.ZodTypeAny = z.ZodTypeAny,
+  TRes extends z.ZodTypeAny = z.ZodTypeAny,
 >(
-  def: ActionDefinition<TReq, TRes>,
+  def: {
+    request?: TReq;
+    response?: TRes;
+    privileged?: any;
+    handler: (ctx: Ctx, args: z.infer<TReq>) => Promise<z.infer<TRes>> | z.infer<TRes>;
+  },
 ): ActionDefinition<TReq, TRes> {
-  return def;
+  return def as any;
 }
 
 export function definePrivilegedContracts<T>(def: T): T {

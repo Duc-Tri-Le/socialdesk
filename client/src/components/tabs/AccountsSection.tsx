@@ -196,23 +196,23 @@ export function AccountsSection({
           {/* Hàng 2: Thống kê trạng thái gom gọn trên 1 hàng */}
           <div className="flex flex-wrap items-center gap-1.5 text-xs">
             <span className="inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--surface-alt)]/60 px-2.5 py-1 text-[var(--dim)]">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-              Phiên: <strong className="text-emerald-400 font-semibold">{summaryStats.totalLoggedIn}</strong> Đã đăng nhập
-              {summaryStats.totalExpired > 0 && <span className="text-zinc-400">· {summaryStats.totalExpired} Hết phiên</span>}
-              {summaryStats.totalCheckpoint > 0 && <span className="text-amber-400 font-semibold">· {summaryStats.totalCheckpoint} Cần xác minh</span>}
+              <span className="h-1.5 w-1.5 rounded-full bg-[var(--ok)]" />
+              Phiên: <strong className="text-[var(--ok)] font-semibold">{summaryStats.totalLoggedIn}</strong> Đã đăng nhập
+              {summaryStats.totalExpired > 0 && <span className="text-[var(--dim)]">· {summaryStats.totalExpired} Hết phiên</span>}
+              {summaryStats.totalCheckpoint > 0 && <span className="text-[var(--warn)] font-semibold">· {summaryStats.totalCheckpoint} Cần xác minh</span>}
             </span>
             <span className="inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--surface-alt)]/60 px-2.5 py-1 text-[var(--dim)]">
-              <span className="h-1.5 w-1.5 rounded-full bg-sky-400" />
-              Extension: <strong className="text-sky-400 font-semibold">{summaryStats.totalOnline}</strong> Online
-              {accounts.length - summaryStats.totalOnline > 0 && <span className="text-zinc-400">· {accounts.length - summaryStats.totalOnline} Offline</span>}
+              <span className="h-1.5 w-1.5 rounded-full bg-[var(--info)]" />
+              Extension: <strong className="text-[var(--info)] font-semibold">{summaryStats.totalOnline}</strong> Online
+              {accounts.length - summaryStats.totalOnline > 0 && <span className="text-[var(--dim)]">· {accounts.length - summaryStats.totalOnline} Offline</span>}
             </span>
             <span className="inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--surface-alt)]/60 px-2.5 py-1 text-[var(--dim)]">
-              <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
-              Đang dùng: <strong className="text-amber-300 font-semibold">{summaryStats.totalSelected}</strong> nick
+              <span className="h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
+              Đang dùng: <strong className="text-[var(--accent)] font-semibold">{summaryStats.totalSelected}</strong> nick
             </span>
             <span className="inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--surface-alt)]/60 px-2.5 py-1 text-[var(--dim)]">
-              <span className="h-1.5 w-1.5 rounded-full bg-indigo-400" />
-              <strong className="text-indigo-300 font-semibold">{pages.length}</strong> Fanpage
+              <span className="h-1.5 w-1.5 rounded-full bg-[var(--info)]" />
+              <strong className="text-[var(--info)] font-semibold">{pages.length}</strong> Fanpage
             </span>
           </div>
         </header>

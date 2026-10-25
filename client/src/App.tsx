@@ -196,7 +196,7 @@ export function App() {
 
         <main
           className={`mx-auto w-full px-4 pb-16 pt-4 ${
-            tab === "compose" || tab === "products"
+            tab === "compose" || tab === "products" || tab === "analytics"
               ? "max-w-6xl"
               : "max-w-3xl"
           }`}
@@ -210,6 +210,7 @@ export function App() {
               onGoProducts={() => setTab("products")}
               onGoAccounts={() => setTab("accounts")}
               onGoAnalytics={() => setTab("analytics")}
+              onRetry={() => overview.refetch()}
             />
           )}
           {tab === "accounts" &&

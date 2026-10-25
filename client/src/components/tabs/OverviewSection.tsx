@@ -13,6 +13,7 @@ export function OverviewSection({
   onGoProducts,
   onGoAccounts,
   onGoAnalytics,
+  onRetry,
 }: {
   overview: Overview | undefined;
   loading: boolean;
@@ -21,8 +22,37 @@ export function OverviewSection({
   onGoProducts: () => void;
   onGoAccounts: () => void;
   onGoAnalytics: () => void;
+  onRetry?: () => void;
 }) {
-  if (loading || !overview) return <p className="text-sm text-[var(--dim)]">Đang tải…</p>;
+  if (loading) {
+    return (
+      <div className="flex items-center gap-2 p-8 text-sm text-[var(--dim)]">
+        <div className="h-4 w-4 animate-spin rounded-full border-2 border-solid border-[var(--accent)] border-r-transparent" />
+        <span>Đang tải thông tin hệ thống…</span>
+      </div>
+    );
+  }
+
+  if (!overview) {
+    return (
+      <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-6 text-center space-y-3 dark:border-amber-900/40 dark:bg-amber-950/20">
+        <h3 className="text-sm font-bold text-[var(--ink)]">Không thể tải thông tin hệ thống</h3>
+        <p className="text-xs text-[var(--dim)]">
+          Vui lòng kiểm tra kết nối với máy chủ backend (cổng 3000) và thử lại.
+        </p>
+        {onRetry && (
+          <button
+            type="button"
+            onClick={onRetry}
+            className={`${btnPrimary} text-xs px-3.5 py-1.5`}
+          >
+            Thử tải lại
+          </button>
+        )}
+      </div>
+    );
+  }
+
   const c = overview.counts;
   const slotsLeft = Math.max(0, overview.limits.max_posts_per_day - c.packed_today);
 
