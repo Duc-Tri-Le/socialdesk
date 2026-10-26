@@ -77,6 +77,7 @@ export const draftOut = z.object({
   status: z.enum(["draft", "approved", "packed"]),
   pack_text: z.string(),
   packed_at: z.string().nullable(),
+  scheduled_at: z.string().nullable(),
   pack_targets: packTargetsOut,
   created_at: z.string(),
   placeholders: z.array(z.string()),

@@ -9,6 +9,8 @@ export interface QueueDraftActionsProps {
   publishConfirm: boolean;
   onTogglePublishConfirm: () => void;
   isPublishPending: boolean;
+  scheduleOpen: boolean;
+  onToggleSchedule: () => void;
   open: boolean;
   onToggleOpen: () => void;
   isEditing: boolean;
@@ -29,6 +31,8 @@ export function QueueDraftActions({
   publishConfirm,
   onTogglePublishConfirm,
   isPublishPending,
+  scheduleOpen,
+  onToggleSchedule,
   open,
   onToggleOpen,
   isEditing,
@@ -52,15 +56,27 @@ export function QueueDraftActions({
           {isApprovePending ? "Đang duyệt…" : "Duyệt bài viết"}
         </button>
       ) : (
-        <button
-          className={`${btnPrimary} whitespace-nowrap`}
-          disabled={isPublishPending}
-          aria-expanded={publishConfirm}
-          aria-label={`Đăng Bài ${d.product_name} lên các đích đã chọn`}
-          onClick={onTogglePublishConfirm}
-        >
-          Đăng Bài
-        </button>
+        <>
+          <button
+            className={`${btnPrimary} whitespace-nowrap`}
+            disabled={isPublishPending}
+            aria-expanded={publishConfirm}
+            aria-label={`Đăng Bài ${d.product_name} lên các đích đã chọn`}
+            onClick={onTogglePublishConfirm}
+          >
+            {d.scheduled_at ? "Đăng ngay" : "Đăng Bài"}
+          </button>
+
+          <button
+            type="button"
+            className={`${btnGhost} whitespace-nowrap font-medium text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/40`}
+            aria-expanded={scheduleOpen}
+            aria-label={`Lên lịch đăng bài ${d.product_name}`}
+            onClick={onToggleSchedule}
+          >
+            {d.scheduled_at ? "⏰ Đổi giờ hẹn" : "⏰ Lên lịch đăng"}
+          </button>
+        </>
       )}
 
       <button

@@ -6,6 +6,7 @@ import {
   executePublishDraft,
   updatePublishBatchOutcome,
 } from "../../services/publishing/publishOrchestrator";
+import { serializePackTargets } from "../../services/postingPack";
 
 export const draftPublishActions = {
   publishDraft: defineAction({
@@ -160,6 +161,113 @@ export const draftPublishActions = {
           ? "Đã lưu đường link bài viết."
           : "Đã xóa đường link bài viết.",
       };
+    },
+  }),
+
+  scheduleDraft: defineAction({
+    request: z.object({
+      id: z.number().int().positive(),
+      scheduled_at: z.string().min(1),
+      group_ids: z.array(z.number().int().positive()).optional().default([]),
+      page_ids: z.array(z.number().int().positive()).optional().default([]),
+      instagram_account_ids: z.array(z.number().int().positive()).optional().default([]),
+    }),
+    response: z.object({
+      ok: z.boolean(),
+      message: z.string(),
+      scheduled_at: z.string().nullable(),
+    }),
+    async handler(ctx, args) {
+      const db = ctx.db<typeof schema>();
+      const [row] = await db
+        .select()
+        .from(schema.drafts)
+        .where(eq(schema.drafts.id, args.id));
+      if (!row) {
+        return { ok: false, message: "Không tìm thấy bản nháp.", scheduled_at: null };
+      }
+      if (row.status !== "approved" && row.status !== "packed") {
+        return {
+          ok: false,
+          message: "Chỉ có thể lên lịch cho bài đã được duyệt.",
+          scheduled_at: null,
+        };
+      }
+
+      const scheduledDate = new Date(args.scheduled_at);
+      if (isNaN(scheduledDate.getTime())) {
+        return { ok: false, message: "Thời gian lên lịch không hợp lệ.", scheduled_at: null };
+      }
+      if (scheduledDate.getTime() <= Date.now() + 30000) {
+        return {
+          ok: false,
+          message: "Thời gian lên lịch phải cách hiện tại ít nhất 1 phút.",
+          scheduled_at: null,
+        };
+      }
+
+      // Lưu đích đăng nếu người dùng tùy chọn đích
+      const groupIds = args.group_ids || [];
+      const pageIds = args.page_ids || [];
+      const igIds = args.instagram_account_ids || [];
+
+      if (groupIds.length > 0 || pageIds.length > 0 || igIds.length > 0) {
+        await db
+          .update(schema.drafts)
+          .set({
+            packTargets: serializePackTargets({
+              group_ids: groupIds,
+              page_ids: pageIds,
+              instagram_account_ids: igIds,
+            }),
+            scheduledAt: scheduledDate,
+          })
+          .where(eq(schema.drafts.id, args.id));
+      } else {
+        await db
+          .update(schema.drafts)
+          .set({ scheduledAt: scheduledDate })
+          .where(eq(schema.drafts.id, args.id));
+      }
+
+      ctx.invalidateQueries();
+      const timeFmt = new Intl.DateTimeFormat("vi-VN", {
+        timeZone: "Asia/Ho_Chi_Minh",
+        hour: "2-digit",
+        minute: "2-digit",
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+      }).format(scheduledDate);
+
+      return {
+        ok: true,
+        message: `Đã lên lịch đăng bài thành công vào lúc ${timeFmt}.`,
+        scheduled_at: scheduledDate.toISOString(),
+      };
+    },
+  }),
+
+  cancelDraftSchedule: defineAction({
+    request: z.object({
+      id: z.number().int().positive(),
+    }),
+    response: z.object({ ok: z.boolean(), message: z.string() }),
+    async handler(ctx, args) {
+      const db = ctx.db<typeof schema>();
+      const [row] = await db
+        .select()
+        .from(schema.drafts)
+        .where(eq(schema.drafts.id, args.id));
+      if (!row) {
+        return { ok: false, message: "Không tìm thấy bản nháp." };
+      }
+      await db
+        .update(schema.drafts)
+        .set({ scheduledAt: null })
+        .where(eq(schema.drafts.id, args.id));
+      ctx.invalidateQueries();
+      return { ok: true, message: "Đã hủy lịch hẹn đăng bài." };
     },
   }),
 };

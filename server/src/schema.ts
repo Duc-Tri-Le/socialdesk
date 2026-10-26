@@ -219,6 +219,8 @@ export const drafts = sqliteTable("drafts", {
   // chưa từng lưu lựa chọn (client tự suy từ các cờ chọn mặc
   // định).
   packTargets: text("pack_targets").notNull().default(""),
+  // Thời gian lên lịch đăng bài tự động (null nếu đăng thủ công)
+  scheduledAt: integer("scheduled_at", { mode: "timestamp_ms" }),
   createdAt: integer("created_at", { mode: "timestamp_ms" })
     .notNull()
     .$defaultFn(() => new Date()),

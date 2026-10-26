@@ -114,6 +114,53 @@ export function useQueueMutations({
     onSuccess: refresh,
   });
 
+  const schedule = useMutation({
+    mutationFn: (args: {
+      id: number;
+      scheduled_at: string;
+      group_ids?: number[];
+      page_ids?: number[];
+      instagram_account_ids?: number[];
+    }) =>
+      api.scheduleDraft({
+        id: args.id,
+        scheduled_at: args.scheduled_at,
+        group_ids: args.group_ids ?? [],
+        page_ids: args.page_ids ?? [],
+        instagram_account_ids: args.instagram_account_ids ?? [],
+      }),
+    onSuccess: (res, args) => {
+      setFeedback((f) => ({ ...f, [args.id]: { ok: res.ok, text: res.message } }));
+      refresh();
+    },
+    onError: (err, args) => {
+      setFeedback((f) => ({
+        ...f,
+        [args.id]: {
+          ok: false,
+          text: `Lên lịch thất bại: ${err instanceof Error ? err.message : "lỗi không rõ"}`,
+        },
+      }));
+    },
+  });
+
+  const cancelSchedule = useMutation({
+    mutationFn: (id: number) => api.cancelDraftSchedule({ id }),
+    onSuccess: (res, id) => {
+      setFeedback((f) => ({ ...f, [id]: { ok: res.ok, text: res.message } }));
+      refresh();
+    },
+    onError: (err, id) => {
+      setFeedback((f) => ({
+        ...f,
+        [id]: {
+          ok: false,
+          text: `Hủy lịch thất bại: ${err instanceof Error ? err.message : "lỗi không rõ"}`,
+        },
+      }));
+    },
+  });
+
   const enqueueRewrite = (d: Draft) => {
     composeJobs.enqueue({
       kind: "rewrite",
@@ -154,6 +201,8 @@ export function useQueueMutations({
     pack,
     saveTargets,
     publish,
+    schedule,
+    cancelSchedule,
     del,
     enqueueRewrite,
   };

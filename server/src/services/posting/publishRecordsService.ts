@@ -82,6 +82,7 @@ export function toDraftOut(
     status: r.status,
     pack_text: r.packText,
     packed_at: r.packedAt ? r.packedAt.toISOString() : null,
+    scheduled_at: r.scheduledAt ? r.scheduledAt.toISOString() : null,
     pack_targets: parsePackTargets(r.packTargets),
     created_at: r.createdAt.toISOString(),
     placeholders: findPlaceholders(r.caption),

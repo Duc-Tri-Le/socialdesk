@@ -14,7 +14,42 @@ import { PublishRecordsList } from "./PublishRecordsList";
 import { QueueDraftActions } from "./QueueDraftActions";
 import { QueueDraftHeader } from "./QueueDraftHeader";
 import { DraftPackViewer } from "./DraftPackViewer";
+import { SchedulePublishDialog } from "./SchedulePublishDialog";
 import { getLatestPublishRecords } from "./queueHelpers";
+
+function formatScheduledTime(iso: string): string {
+  try {
+    const dt = new Date(iso);
+    return new Intl.DateTimeFormat("vi-VN", {
+      timeZone: "Asia/Ho_Chi_Minh",
+      hour: "2-digit",
+      minute: "2-digit",
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    }).format(dt);
+  } catch {
+    return iso;
+  }
+}
+
+function getTimeUntil(iso: string): string {
+  try {
+    const dt = new Date(iso);
+    const diffMs = dt.getTime() - Date.now();
+    if (diffMs <= 0) return "đang xử lý hoặc đã tới giờ";
+    const hours = Math.floor(diffMs / (1000 * 60 * 60));
+    const mins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+    if (hours > 24) {
+      const days = Math.floor(hours / 24);
+      return `còn ${days} ngày nữa`;
+    }
+    if (hours > 0) return `còn ${hours}h ${mins}p nữa`;
+    return `còn ${mins} phút nữa`;
+  } catch {
+    return "";
+  }
+}
 
 export interface QueueDraftCardProps {
   draft: Draft;
@@ -46,6 +81,16 @@ export interface QueueDraftCardProps {
     instagram_account_ids: number[];
   }) => void;
   isPublishPending: boolean;
+  onSchedule?: (args: {
+    id: number;
+    scheduled_at: string;
+    group_ids?: number[];
+    page_ids?: number[];
+    instagram_account_ids?: number[];
+  }) => void;
+  isSchedulePending?: boolean;
+  onCancelSchedule?: (id: number) => void;
+  isCancelSchedulePending?: boolean;
   onDelete: (id: number) => void;
   onRewrite: (d: Draft) => void;
   onSaveTargets: (args: {
@@ -76,6 +121,10 @@ export function QueueDraftCard({
   isPackPending,
   onPublish,
   isPublishPending,
+  onSchedule,
+  isSchedulePending,
+  onCancelSchedule,
+  isCancelSchedulePending,
   onDelete,
   onRewrite,
   onSaveTargets,
@@ -87,6 +136,7 @@ export function QueueDraftCard({
   const [captionDraft, setCaptionDraft] = useState(d.caption);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [publishConfirm, setPublishConfirm] = useState(false);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
 
   // Khởi tạo đích đăng từ bản đã lưu hoặc từ cấu hình mặc định
   const savedTargets = d.pack_targets;
@@ -190,6 +240,48 @@ export function QueueDraftCard({
 
       {/* Feedback banner */}
       <FeedbackBanner feedback={feedback} />
+
+      {/* Banner thông báo đã lên lịch đăng tự động */}
+      {d.scheduled_at && (
+        <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2.5 rounded-xl border border-indigo-500/30 bg-indigo-500/10 px-3.5 py-2.5 text-xs text-indigo-950 dark:text-indigo-200">
+          <div className="flex items-center gap-2">
+            <span className="text-base">⏰</span>
+            <div>
+              <span className="font-bold text-indigo-800 dark:text-indigo-300">
+                Đã hẹn giờ đăng tự động:
+              </span>{" "}
+              <strong className="underline decoration-indigo-400">
+                {formatScheduledTime(d.scheduled_at)}
+              </strong>{" "}
+              <span className="text-[11px] opacity-80 font-medium">
+                ({getTimeUntil(d.scheduled_at)})
+              </span>
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => {
+                setPublishConfirm(false);
+                setScheduleOpen(true);
+              }}
+              className="rounded-lg bg-indigo-500/20 hover:bg-indigo-500/30 px-2.5 py-1 font-semibold text-indigo-700 dark:text-indigo-200 transition cursor-pointer"
+            >
+              Đổi giờ
+            </button>
+            {onCancelSchedule && (
+              <button
+                type="button"
+                disabled={isCancelSchedulePending}
+                onClick={() => onCancelSchedule(d.id)}
+                className="rounded-lg bg-rose-500/15 hover:bg-rose-500/25 px-2.5 py-1 font-semibold text-rose-700 dark:text-rose-300 transition cursor-pointer disabled:opacity-50"
+              >
+                {isCancelSchedulePending ? "Đang hủy…" : "Hủy lịch"}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Chi tiết khi mở rộng (Xem chi tiết) */}
       {open && (
@@ -345,8 +437,16 @@ export function QueueDraftCard({
         isApprovePending={isApprovePending}
         onApprove={onApprove}
         publishConfirm={publishConfirm}
-        onTogglePublishConfirm={() => setPublishConfirm(!publishConfirm)}
+        onTogglePublishConfirm={() => {
+          setScheduleOpen(false);
+          setPublishConfirm(!publishConfirm);
+        }}
         isPublishPending={isPublishPending}
+        scheduleOpen={scheduleOpen}
+        onToggleSchedule={() => {
+          setPublishConfirm(false);
+          setScheduleOpen(!scheduleOpen);
+        }}
         open={open}
         onToggleOpen={() => {
           if (open && isEditing) setIsEditing(false);
@@ -390,6 +490,31 @@ export function QueueDraftCard({
             setPublishConfirm(false);
           }}
           onCancel={() => setPublishConfirm(false)}
+        />
+      )}
+
+      {/* Khối Lên lịch đăng bài */}
+      {scheduleOpen && onSchedule && (
+        <SchedulePublishDialog
+          draft={d}
+          selectedPageIds={selectedPages}
+          selectedIgIds={selectedIg}
+          selectedGroupIds={selectedGroups}
+          allPages={allPages}
+          igAccounts={igAccounts}
+          joinedGroups={joinedGroups}
+          isSchedulePending={!!isSchedulePending}
+          onConfirmSchedule={(scheduledAt) => {
+            onSchedule({
+              id: d.id,
+              scheduled_at: scheduledAt,
+              group_ids: selectedGroups,
+              page_ids: selectedPages,
+              instagram_account_ids: selectedIg,
+            });
+            setScheduleOpen(false);
+          }}
+          onCancel={() => setScheduleOpen(false)}
         />
       )}
     </li>

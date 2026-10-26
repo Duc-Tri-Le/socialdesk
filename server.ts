@@ -12,6 +12,8 @@ import {
   handleExtensionWsClose,
 } from "./server/src/devServer/extensionWs";
 import { createLocalContext } from "./server/src/devServer/localContext";
+import { executePublishDraft } from "./server/src/services/publishing/publishOrchestrator";
+import { defaultPackTargets } from "./server/src/services/posting/packBuilder";
 
 // Khởi tạo Database SQLite cục bộ
 const dbPath = path.resolve("./social-desk-database.db");
@@ -34,6 +36,11 @@ try {
   sqlite.run("ALTER TABLE post_metrics ADD COLUMN scanned_at INTEGER;");
 } catch {
   // Cột scanned_at đã tồn tại
+}
+try {
+  sqlite.run("ALTER TABLE drafts ADD COLUMN scheduled_at INTEGER;");
+} catch {
+  // Cột scheduled_at đã tồn tại
 }
 try {
   sqlite.run(`CREATE TABLE IF NOT EXISTS post_metric_snapshots (
@@ -226,3 +233,69 @@ console.log(`🚀 Social Desk Standalone Server đang chạy tại:`);
 console.log(`👉 http://localhost:${server.port}`);
 console.log(`Database: ${dbPath}`);
 console.log(`=======================================================`);
+
+// =======================================================
+// Bộ hẹn giờ: Tự động quét và đăng bài theo lịch hẹn mỗi 20 giây
+// =======================================================
+let isSchedulerRunning = false;
+setInterval(async () => {
+  if (isSchedulerRunning) return;
+  isSchedulerRunning = true;
+  try {
+    const now = Date.now();
+    const dueDrafts = sqlite
+      .query(
+        "SELECT * FROM drafts WHERE scheduled_at IS NOT NULL AND scheduled_at <= ? AND status IN ('approved', 'packed')",
+      )
+      .all(now) as any[];
+
+    for (const d of dueDrafts) {
+      console.log(
+        `[Scheduler] ⏰ Phát hiện bài đăng #${d.id} ("${d.product_name}") đã đến giờ hẹn. Bắt đầu đăng tự động...`,
+      );
+      // Đặt scheduled_at = NULL trước để tránh trùng lặp nếu tác vụ kéo dài
+      sqlite.run("UPDATE drafts SET scheduled_at = NULL WHERE id = ?", [d.id]);
+
+      try {
+        let targets = { group_ids: [] as number[], page_ids: [] as number[], instagram_account_ids: [] as number[] };
+        const raw = d.pack_targets || "";
+        if (raw.trim()) {
+          try {
+            const parsed = JSON.parse(raw);
+            targets = {
+              group_ids: Array.isArray(parsed.group_ids) ? parsed.group_ids : [],
+              page_ids: Array.isArray(parsed.page_ids) ? parsed.page_ids : [],
+              instagram_account_ids: Array.isArray(parsed.instagram_account_ids) ? parsed.instagram_account_ids : [],
+            };
+          } catch {}
+        }
+
+        if (
+          targets.group_ids.length === 0 &&
+          targets.page_ids.length === 0 &&
+          targets.instagram_account_ids.length === 0
+        ) {
+          targets = await defaultPackTargets(db);
+        }
+
+        const res = await executePublishDraft(ctx, {
+          id: d.id,
+          group_ids: targets.group_ids,
+          page_ids: targets.page_ids,
+          instagram_account_ids: targets.instagram_account_ids,
+        });
+
+        console.log(
+          `[Scheduler] ✓ Kết quả tự động đăng bài #${d.id}: ${res.ok ? "Thành công" : "Cần kiểm tra"} - ${res.message}`,
+        );
+      } catch (err: any) {
+        console.error(`[Scheduler] ✗ Lỗi khi tự động đăng bài #${d.id}:`, err?.message || err);
+      }
+    }
+  } catch (loopErr) {
+    console.error("[Scheduler] Lỗi vòng lặp lịch hẹn:", loopErr);
+  } finally {
+    isSchedulerRunning = false;
+  }
+}, 20000);
+

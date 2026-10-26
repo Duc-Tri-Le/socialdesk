@@ -54,6 +54,7 @@ export function QueueSection({
   const QUEUE_PAGE_SIZE = 5;
   type QueueTab = "draft" | "ready" | "history";
   const [queueTab, setQueueTab] = useState<QueueTab>("draft");
+  const [scheduleFilter, setScheduleFilter] = useState<"all" | "scheduled" | "unscheduled">("all");
   const [queuePage, setQueuePage] = useState<Record<QueueTab, number>>({
     draft: 1,
     ready: 1,
@@ -68,6 +69,8 @@ export function QueueSection({
     pack,
     saveTargets,
     publish,
+    schedule,
+    cancelSchedule,
     del,
     enqueueRewrite,
   } = useQueueMutations({
@@ -93,6 +96,13 @@ export function QueueSection({
   );
   const selectedMainCount = mainAccounts.filter((a) => a.selected).length;
 
+  const scheduledCount = drafts.filter(
+    (d) =>
+      (d.status === "approved" || d.status === "packed") &&
+      !!d.scheduled_at &&
+      !d.publish_records.some((r) => r.status === "published"),
+  ).length;
+
   const queueTabs: {
     id: QueueTab;
     label: string;
@@ -109,12 +119,21 @@ export function QueueSection({
     },
     {
       id: "ready",
-      label: "Đã duyệt",
-      emptyText: "Chưa có bài nào đã duyệt.",
+      label: scheduledCount > 0 ? `Đã duyệt (⏰ ${scheduledCount})` : "Đã duyệt",
+      emptyText:
+        scheduleFilter === "scheduled"
+          ? "Chưa có bài nào được lên lịch hẹn giờ đăng."
+          : "Chưa có bài nào đã duyệt.",
       ariaLabel: "Đã duyệt",
-      matches: (d) =>
-        (d.status === "approved" || d.status === "packed") &&
-        !d.publish_records.some((r) => r.status === "published"),
+      matches: (d) => {
+        const isReady =
+          (d.status === "approved" || d.status === "packed") &&
+          !d.publish_records.some((r) => r.status === "published");
+        if (!isReady) return false;
+        if (scheduleFilter === "scheduled") return !!d.scheduled_at;
+        if (scheduleFilter === "unscheduled") return !d.scheduled_at;
+        return true;
+      },
     },
     {
       id: "history",
@@ -191,6 +210,60 @@ export function QueueSection({
         />
       </div>
 
+      {/* Subfilter cho trang Đã duyệt: Tất cả / Đã hẹn giờ / Chưa hẹn giờ */}
+      {queueTab === "ready" && (
+        <div className="flex flex-wrap items-center gap-2 pt-1 text-xs">
+          <span className="font-medium text-[var(--dim)]">Lọc:</span>
+          <button
+            type="button"
+            onClick={() => {
+              setScheduleFilter("all");
+              setQueuePage((s) => ({ ...s, ready: 1 }));
+            }}
+            className={`rounded-full px-3 py-1 font-semibold transition cursor-pointer ${
+              scheduleFilter === "all"
+                ? "bg-[var(--accent)] text-white"
+                : "border border-[var(--border)] bg-[var(--surface)] text-[var(--dim)] hover:text-[var(--text)]"
+            }`}
+          >
+            Tất cả bài đã duyệt
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setScheduleFilter("scheduled");
+              setQueuePage((s) => ({ ...s, ready: 1 }));
+            }}
+            className={`flex items-center gap-1.5 rounded-full px-3 py-1 font-semibold transition cursor-pointer ${
+              scheduleFilter === "scheduled"
+                ? "bg-indigo-600 text-white"
+                : "border border-indigo-300 dark:border-indigo-800 bg-indigo-50/50 dark:bg-indigo-950/30 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100"
+            }`}
+          >
+            <span>⏰ Đã lên lịch</span>
+            {scheduledCount > 0 && (
+              <span className="rounded-full bg-white/20 px-1.5 py-0.2 text-[10px] font-mono font-bold">
+                {scheduledCount}
+              </span>
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setScheduleFilter("unscheduled");
+              setQueuePage((s) => ({ ...s, ready: 1 }));
+            }}
+            className={`rounded-full px-3 py-1 font-semibold transition cursor-pointer ${
+              scheduleFilter === "unscheduled"
+                ? "bg-[var(--accent)] text-white"
+                : "border border-[var(--border)] bg-[var(--surface)] text-[var(--dim)] hover:text-[var(--text)]"
+            }`}
+          >
+            Chưa hẹn giờ
+          </button>
+        </div>
+      )}
+
       {/* Thông tin đang lọc kết quả */}
       {searchQuery.trim() && (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-[var(--radius)] bg-[var(--surface-alt)] px-3 py-1.5 text-xs">
@@ -254,6 +327,10 @@ export function QueueSection({
                   isPackPending={pack.isPending}
                   onPublish={(args) => publish.mutate(args)}
                   isPublishPending={publish.isPending}
+                  onSchedule={(args) => schedule.mutate(args)}
+                  isSchedulePending={schedule.isPending}
+                  onCancelSchedule={(id) => cancelSchedule.mutate(id)}
+                  isCancelSchedulePending={cancelSchedule.isPending}
                   onDelete={(id) => del.mutate(id)}
                   onRewrite={enqueueRewrite}
                   onSaveTargets={(args) => saveTargets.mutate(args)}

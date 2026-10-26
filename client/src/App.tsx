@@ -103,6 +103,10 @@ export function App() {
   const drafts = useQuery({
     queryKey: ["drafts"],
     queryFn: () => api.listDrafts({}),
+    refetchInterval: (query) => {
+      const hasScheduled = query.state.data?.drafts?.some((d) => !!d.scheduled_at);
+      return hasScheduled ? 15000 : false;
+    },
   });
 
   const pending = overview.data?.counts.drafts_pending ?? 0;
