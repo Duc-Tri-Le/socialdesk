@@ -87,11 +87,15 @@ export async function buildPackTextForDraft(
           )
           .join("\n")
       : "";
+  const groupIds = args.group_ids ?? [];
+  const pageIds = args.page_ids ?? [];
+  const igIds = args.instagram_account_ids ?? [];
+
   const allGroups = await db
     .select()
     .from(schema.fbGroups)
     .orderBy(asc(schema.fbGroups.id));
-  const chosen = allGroups.filter((g) => args.group_ids.includes(g.id));
+  const chosen = allGroups.filter((g) => groupIds.includes(g.id));
   const joinCtx = await loadJoinContext(db);
   const joinedByGroup = new Map(
     chosen.map((g) => [g.id, postingJoinedIdentities(joinCtx, g)]),
@@ -131,17 +135,17 @@ export async function buildPackTextForDraft(
   });
   const allPages = await db.select().from(schema.fbPages);
   const chosenPages = opts?.explicit
-    ? allPages.filter((p) => args.page_ids.includes(p.id))
-    : args.page_ids.length > 0
-      ? allPages.filter((p) => args.page_ids.includes(p.id))
+    ? allPages.filter((p) => pageIds.includes(p.id))
+    : pageIds.length > 0
+      ? allPages.filter((p) => pageIds.includes(p.id))
       : postingPages;
   const igAccounts = allAccounts.filter(
     (a) => a.platform === "Instagram" && a.linked === 1,
   );
   const chosenIgAccounts = opts?.explicit
-    ? igAccounts.filter((a) => args.instagram_account_ids.includes(a.id))
-    : args.instagram_account_ids.length > 0
-      ? igAccounts.filter((a) => args.instagram_account_ids.includes(a.id))
+    ? igAccounts.filter((a) => igIds.includes(a.id))
+    : igIds.length > 0
+      ? igAccounts.filter((a) => igIds.includes(a.id))
       : igAccounts.filter((a) => a.selected === 1);
   const targetLines =
     chosen.length > 0

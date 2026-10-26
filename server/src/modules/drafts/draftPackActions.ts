@@ -114,9 +114,9 @@ export const draftPackActions = {
   saveDraftTargets: defineAction({
     request: z.object({
       id: z.number().int().positive(),
-      group_ids: z.array(z.number().int().positive()),
-      page_ids: z.array(z.number().int().positive()).default([]),
-      instagram_account_ids: z.array(z.number().int().positive()).default([]),
+      group_ids: z.array(z.number().int().positive()).optional().default([]),
+      page_ids: z.array(z.number().int().positive()).optional().default([]),
+      instagram_account_ids: z.array(z.number().int().positive()).optional().default([]),
     }),
     response: z.object({ ok: z.boolean(), message: z.string() }),
     async handler(ctx, args) {
@@ -127,9 +127,9 @@ export const draftPackActions = {
         .where(eq(schema.drafts.id, args.id));
       if (!row) return { ok: false, message: "Không tìm thấy bản nháp." };
       const targets: PackTargetsInput = {
-        group_ids: args.group_ids,
-        page_ids: args.page_ids,
-        instagram_account_ids: args.instagram_account_ids,
+        group_ids: args.group_ids ?? [],
+        page_ids: args.page_ids ?? [],
+        instagram_account_ids: args.instagram_account_ids ?? [],
       };
 
       if (row.status === "draft") {
@@ -185,9 +185,9 @@ export const draftPackActions = {
   buildPack: defineAction({
     request: z.object({
       id: z.number().int().positive(),
-      group_ids: z.array(z.number().int().positive()),
-      page_ids: z.array(z.number().int().positive()).default([]),
-      instagram_account_ids: z.array(z.number().int().positive()).default([]),
+      group_ids: z.array(z.number().int().positive()).optional().default([]),
+      page_ids: z.array(z.number().int().positive()).optional().default([]),
+      instagram_account_ids: z.array(z.number().int().positive()).optional().default([]),
     }),
     response: z.object({
       ok: z.boolean(),
@@ -208,11 +208,23 @@ export const draftPackActions = {
           message: `Bản nháp chưa được duyệt (trạng thái: ${row.status}). Duyệt bài trước khi cập nhật gói đăng.`,
           pack_text: "",
         };
-      const built = await buildPackTextForDraft(db, row, {
-        group_ids: args.group_ids,
-        page_ids: args.page_ids,
-        instagram_account_ids: args.instagram_account_ids,
-      });
+
+      const groupIds = args.group_ids ?? [];
+      const pageIds = args.page_ids ?? [];
+      const igIds = args.instagram_account_ids ?? [];
+
+      const built = await buildPackTextForDraft(
+        db,
+        row,
+        {
+          group_ids: groupIds,
+          page_ids: pageIds,
+          instagram_account_ids: igIds,
+        },
+        {
+          explicit: true,
+        },
+      );
       if (!built.ok)
         return { ok: false, message: built.message, pack_text: "" };
 
@@ -224,9 +236,9 @@ export const draftPackActions = {
           packedAt: new Date(),
           caption: built.cleanCaption,
           packTargets: serializePackTargets({
-            group_ids: args.group_ids,
-            page_ids: args.page_ids,
-            instagram_account_ids: args.instagram_account_ids,
+            group_ids: groupIds,
+            page_ids: pageIds,
+            instagram_account_ids: igIds,
           }),
         })
         .where(eq(schema.drafts.id, args.id));

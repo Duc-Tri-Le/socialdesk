@@ -138,32 +138,51 @@ export function QueueDraftCard({
   const [publishConfirm, setPublishConfirm] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
 
-  // Khởi tạo đích đăng từ bản đã lưu hoặc từ cấu hình mặc định
+  // Khởi tạo đích đăng từ bản đã lưu hoặc từ cấu hình mặc định (loại bỏ ID cũ không còn hợp lệ)
   const savedTargets = d.pack_targets;
-  const [selectedGroups, setSelectedGroups] = useState<number[]>(() =>
-    savedTargets.saved
-      ? savedTargets.group_ids
-      : joinedGroups.filter((g) => g.is_target).map((g) => g.id),
-  );
-  const [selectedPages, setSelectedPages] = useState<number[]>(() =>
-    savedTargets.saved
-      ? savedTargets.page_ids
-      : allPages.filter((p) => p.selected).map((p) => p.id),
-  );
-  const [selectedIg, setSelectedIg] = useState<number[]>(() =>
-    savedTargets.saved
-      ? savedTargets.instagram_account_ids
-      : igAccounts.filter((a) => a.selected).map((a) => a.id),
-  );
+  const filterValidTargets = (targets: {
+    group_ids: number[];
+    page_ids: number[];
+    instagram_account_ids: number[];
+  }) => ({
+    groups: targets.group_ids.filter((id) =>
+      joinedGroups.some((g) => g.id === id),
+    ),
+    pages: targets.page_ids.filter((id) => allPages.some((p) => p.id === id)),
+    igs: targets.instagram_account_ids.filter((id) =>
+      igAccounts.some((a) => a.id === id),
+    ),
+  });
+
+  const [selectedGroups, setSelectedGroups] = useState<number[]>(() => {
+    if (savedTargets.saved) {
+      return filterValidTargets(savedTargets).groups;
+    }
+    return joinedGroups.filter((g) => g.is_target).map((g) => g.id);
+  });
+  const [selectedPages, setSelectedPages] = useState<number[]>(() => {
+    if (savedTargets.saved) {
+      return filterValidTargets(savedTargets).pages;
+    }
+    return allPages.filter((p) => p.selected).map((p) => p.id);
+  });
+  const [selectedIg, setSelectedIg] = useState<number[]>(() => {
+    if (savedTargets.saved) {
+      return filterValidTargets(savedTargets).igs;
+    }
+    return igAccounts.filter((a) => a.selected).map((a) => a.id);
+  });
 
   // Cập nhật lại khi d.pack_targets từ server thay đổi
+  const savedTargetsKey = `${savedTargets.saved}:${savedTargets.group_ids.join(",")}:${savedTargets.page_ids.join(",")}:${savedTargets.instagram_account_ids.join(",")}`;
   useEffect(() => {
     if (savedTargets.saved) {
-      setSelectedGroups(savedTargets.group_ids);
-      setSelectedPages(savedTargets.page_ids);
-      setSelectedIg(savedTargets.instagram_account_ids);
+      const valid = filterValidTargets(savedTargets);
+      setSelectedGroups(valid.groups);
+      setSelectedPages(valid.pages);
+      setSelectedIg(valid.igs);
     }
-  }, [savedTargets]);
+  }, [savedTargetsKey, joinedGroups.length, allPages.length, igAccounts.length]);
 
   const applyTargets = (groups: number[], pages: number[], igs: number[]) => {
     setSelectedGroups(groups);
@@ -401,7 +420,20 @@ export function QueueDraftCard({
           )}
 
           {/* Gói đăng */}
-          {!isDraft && <DraftPackViewer draft={d} />}
+          {!isDraft && (
+            <DraftPackViewer
+              draft={d}
+              onPack={() =>
+                onPack({
+                  id: d.id,
+                  group_ids: selectedGroups,
+                  page_ids: selectedPages,
+                  instagram_account_ids: selectedIg,
+                })
+              }
+              isPackPending={isPackPending}
+            />
+          )}
 
           {/* Lịch sử đăng bài (lần thử trước) */}
           <PublishRecordsList draft={d} records={latestPublishRecords} />
@@ -427,6 +459,13 @@ export function QueueDraftCard({
               onGoGroups={onGoGroups}
             />
           </div>
+        </div>
+      )}
+
+      {/* Thông báo thao tác ngay trên thanh điều khiển khi mở rộng */}
+      {open && feedback && (
+        <div className="mt-3">
+          <FeedbackBanner feedback={feedback} />
         </div>
       )}
 

@@ -111,12 +111,12 @@ export function QueueDraftActions({
       {open && !isDraft && (
         <>
           <button
-            className={`${btnGhost} whitespace-nowrap`}
+            className={`${btnGhost} whitespace-nowrap cursor-pointer`}
             disabled={isPackPending}
             aria-label={`Cập nhật gói đăng cho ${d.product_name} theo các đích đã chọn`}
             onClick={onPack}
           >
-            Cập nhật gói đăng
+            {isPackPending ? "Đang cập nhật gói…" : "Cập nhật gói đăng"}
           </button>
           <button
             className={`${btnGhost} whitespace-nowrap`}

@@ -57,28 +57,62 @@ export function useQueueMutations({
   const pack = useMutation({
     mutationFn: (args: {
       id: number;
-      group_ids: number[];
-      page_ids: number[];
-      instagram_account_ids: number[];
-    }) => api.buildPack(args),
+      group_ids?: number[];
+      page_ids?: number[];
+      instagram_account_ids?: number[];
+    }) =>
+      api.buildPack({
+        id: args.id,
+        group_ids: args.group_ids ?? [],
+        page_ids: args.page_ids ?? [],
+        instagram_account_ids: args.instagram_account_ids ?? [],
+      }),
     onSuccess: (res, args) => {
       setFeedback((f) => ({ ...f, [args.id]: { ok: res.ok, text: res.message } }));
       refresh();
+    },
+    onError: (err, args) => {
+      setFeedback((f) => ({
+        ...f,
+        [args.id]: {
+          ok: false,
+          text: `Cập nhật gói đăng thất bại: ${
+            err instanceof Error ? err.message : "lỗi không rõ"
+          }`,
+        },
+      }));
     },
   });
 
   const saveTargets = useMutation({
     mutationFn: (args: {
       id: number;
-      group_ids: number[];
-      page_ids: number[];
-      instagram_account_ids: number[];
-    }) => api.saveDraftTargets(args),
+      group_ids?: number[];
+      page_ids?: number[];
+      instagram_account_ids?: number[];
+    }) =>
+      api.saveDraftTargets({
+        id: args.id,
+        group_ids: args.group_ids ?? [],
+        page_ids: args.page_ids ?? [],
+        instagram_account_ids: args.instagram_account_ids ?? [],
+      }),
     onSuccess: (res, args) => {
       if (!res.ok) {
         setFeedback((f) => ({ ...f, [args.id]: { ok: false, text: res.message } }));
       }
       refresh();
+    },
+    onError: (err, args) => {
+      setFeedback((f) => ({
+        ...f,
+        [args.id]: {
+          ok: false,
+          text: `Lưu đích đăng thất bại: ${
+            err instanceof Error ? err.message : "lỗi không rõ"
+          }`,
+        },
+      }));
     },
   });
 
