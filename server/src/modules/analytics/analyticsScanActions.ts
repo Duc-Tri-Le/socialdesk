@@ -6,6 +6,7 @@ import {
   normalizeChannelKey,
   buildPublishUrlMap,
   prepareSyncMetricsBatch,
+  ensureMetricsSynced,
   type MetricRow,
 } from "../../services/analytics";
 
@@ -77,6 +78,9 @@ export const analyticsScanActions = {
       const extCode = onlineCodes[0];
 
       const db = ctx.db<typeof schema>();
+      // Tự động đồng bộ các bài đã đăng từ hàng đợi vào bảng chỉ số
+      await ensureMetricsSynced(db);
+
       let targets: MetricRow[] = [];
 
       if (args.metric_id) {
@@ -92,7 +96,7 @@ export const analyticsScanActions = {
           .select()
           .from(schema.postMetrics)
           .orderBy(desc(schema.postMetrics.postedAt))
-          .limit(5);
+          .limit(15);
       }
 
       const pubRecords = await db
@@ -110,7 +114,7 @@ export const analyticsScanActions = {
           postUrl = urlMap.get(key) || "";
         }
 
-        if (!postUrl || !postUrl.includes("facebook.com")) continue;
+        if (!postUrl || (!postUrl.includes("facebook.com") && !postUrl.includes("instagram.com"))) continue;
 
         try {
           const res = await sendTask(
@@ -130,16 +134,21 @@ export const analyticsScanActions = {
             // Reach chỉ cập nhật khi kênh là Fanpage hoặc có dữ liệu Insights từ quyền Admin
             const newReach = typeof res.reach === "number" && res.reach > 0 ? res.reach : m.reach;
 
+            const updateValues: Record<string, any> = {
+              likes: newLikes,
+              comments: newComments,
+              shares: newShares,
+              reach: newReach,
+              postStatus: "active",
+              scannedAt: new Date(),
+            };
+            if (res.postUrl && typeof res.postUrl === "string" && res.postUrl.length > 10 && res.postUrl !== m.notes) {
+              updateValues.notes = res.postUrl;
+            }
+
             await db
               .update(schema.postMetrics)
-              .set({
-                likes: newLikes,
-                comments: newComments,
-                shares: newShares,
-                reach: newReach,
-                postStatus: "active",
-                scannedAt: new Date(),
-              })
+              .set(updateValues)
               .where(eq(schema.postMetrics.id, m.id));
 
             await db.insert(schema.postMetricSnapshots).values({
@@ -215,6 +224,8 @@ export const analyticsScanActions = {
       const extCode = onlineCodes[0];
 
       const db = ctx.db<typeof schema>();
+      await ensureMetricsSynced(db);
+
       const targets = await db
         .select()
         .from(schema.postMetrics)
@@ -235,7 +246,7 @@ export const analyticsScanActions = {
           postUrl = urlMap.get(key) || "";
         }
 
-        if (!postUrl || !postUrl.includes("facebook.com")) continue;
+        if (!postUrl || (!postUrl.includes("facebook.com") && !postUrl.includes("instagram.com"))) continue;
 
         try {
           const res = await sendTask(
@@ -255,16 +266,21 @@ export const analyticsScanActions = {
             // Reach chỉ cập nhật khi kênh là Fanpage hoặc có dữ liệu Insights từ quyền Admin
             const newReach = typeof res.reach === "number" && res.reach > 0 ? res.reach : m.reach;
 
+            const updateValues: Record<string, any> = {
+              likes: newLikes,
+              comments: newComments,
+              shares: newShares,
+              reach: newReach,
+              postStatus: "active",
+              scannedAt: new Date(),
+            };
+            if (res.postUrl && typeof res.postUrl === "string" && res.postUrl.length > 10 && res.postUrl !== m.notes) {
+              updateValues.notes = res.postUrl;
+            }
+
             await db
               .update(schema.postMetrics)
-              .set({
-                likes: newLikes,
-                comments: newComments,
-                shares: newShares,
-                reach: newReach,
-                postStatus: "active",
-                scannedAt: new Date(),
-              })
+              .set(updateValues)
               .where(eq(schema.postMetrics.id, m.id));
 
             await db.insert(schema.postMetricSnapshots).values({

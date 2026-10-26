@@ -246,7 +246,7 @@ export async function dispatchBrowserQueue(
 
         const defaultUrl =
           t.kind === "instagram"
-            ? "https://www.instagram.com/"
+            ? (targetAcc?.profileUrl || "https://www.instagram.com/")
             : "https://www.facebook.com/";
 
         const taskPayload = {
@@ -255,7 +255,8 @@ export async function dispatchBrowserQueue(
           draftId: row.id,
           targetKind: t.kind,
           targetName: t.name,
-          targetUrl: t.kind === "instagram" ? "https://www.instagram.com/" : (t.url || defaultUrl),
+          targetUrl: t.kind === "instagram" ? (targetAcc?.profileUrl || t.url || defaultUrl) : (t.url || defaultUrl),
+          profileUrl: targetAcc?.profileUrl || (t.kind === "instagram" ? t.url : "") || "",
           caption,
           images: finalImages,
         };

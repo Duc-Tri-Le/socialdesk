@@ -8,6 +8,7 @@ import {
   serializePackTargets,
 } from "../server/src/services/posting/packBuilder";
 import { draftPackActions } from "../server/src/modules/drafts/draftPackActions";
+import { draftCrudActions } from "../server/src/modules/drafts";
 import { eq } from "drizzle-orm";
 
 describe("Draft Pack Builder & Targets", () => {
@@ -215,6 +216,38 @@ describe("Draft Pack Builder & Targets", () => {
     expect(updated?.packText).toBe("");
     expect(updated?.packedAt).toBeNull();
     expect(updated?.scheduledAt).toBeNull();
+  });
+
+  it("deleteDraft xóa sạch toàn diện bản nháp, publish_records và post_metrics liên quan khỏi database", async () => {
+    const sqlite = new Database(":memory:");
+    sqlite.run(`CREATE TABLE drafts (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT, product_name TEXT, caption TEXT, reels TEXT);`);
+    sqlite.run(`CREATE TABLE publish_records (id INTEGER PRIMARY KEY AUTOINCREMENT, draft_id INTEGER, target_name TEXT, status TEXT);`);
+    sqlite.run(`CREATE TABLE post_metrics (id INTEGER PRIMARY KEY AUTOINCREMENT, draft_id INTEGER, product_name TEXT, channel_name TEXT, posted_at INTEGER);`);
+    sqlite.run(`CREATE TABLE post_metric_snapshots (id INTEGER PRIMARY KEY AUTOINCREMENT, posting_id INTEGER, captured_at INTEGER);`);
+
+    sqlite.run(`INSERT INTO drafts (id, code, product_name, caption, reels) VALUES (99, 'D-099', 'Xe Test', 'cap', '');`);
+    sqlite.run(`INSERT INTO publish_records (id, draft_id, target_name, status) VALUES (101, 99, 'Fanpage Test', 'published');`);
+    sqlite.run(`INSERT INTO post_metrics (id, draft_id, product_name, channel_name, posted_at) VALUES (201, 99, 'Xe Test', 'Fanpage Test', 1700000000);`);
+    sqlite.run(`INSERT INTO post_metric_snapshots (id, posting_id, captured_at) VALUES (301, 201, 1700000000);`);
+
+    const db = drizzle(sqlite, { schema });
+    // @ts-expect-error mock ctx
+    const ctx = { db: () => db, invalidateQueries: () => {} };
+
+    const res = await draftCrudActions.deleteDraft.handler(ctx, { id: 99 });
+    expect(res.ok).toBe(true);
+
+    const remainingDrafts = await db.select().from(schema.drafts).where(eq(schema.drafts.id, 99));
+    expect(remainingDrafts.length).toBe(0);
+
+    const remainingPub = await db.select().from(schema.publishRecords).where(eq(schema.publishRecords.draftId, 99));
+    expect(remainingPub.length).toBe(0);
+
+    const remainingMetrics = await db.select().from(schema.postMetrics).where(eq(schema.postMetrics.draftId, 99));
+    expect(remainingMetrics.length).toBe(0);
+
+    const remainingSnapshots = await db.select().from(schema.postMetricSnapshots).where(eq(schema.postMetricSnapshots.postingId, 201));
+    expect(remainingSnapshots.length).toBe(0);
   });
 });
 

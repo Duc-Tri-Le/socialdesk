@@ -16,6 +16,7 @@ import {
   dashboardFiltersInput,
   engagementDashboardOut,
   buildEngagementDashboard,
+  ensureMetricsSynced,
 } from "../../services/analytics";
 
 export const analyticsReportActions = {
@@ -32,6 +33,7 @@ export const analyticsReportActions = {
     }),
     async handler(ctx) {
       const db = ctx.db<typeof schema>();
+      await ensureMetricsSynced(db);
       const rows = await db.select().from(schema.postMetrics);
       return aggregateAnalytics(rows);
     },
@@ -47,6 +49,7 @@ export const analyticsReportActions = {
     response: analyticsOverviewOut,
     async handler(ctx) {
       const db = ctx.db<typeof schema>();
+      await ensureMetricsSynced(db);
       const [metrics, drafts, products] = await Promise.all([
         db.select().from(schema.postMetrics),
         db.select().from(schema.drafts),

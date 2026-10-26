@@ -110,7 +110,7 @@ export async function prepareInstagramQueue(
           recordId,
           kind: "instagram",
           name: a.name,
-          url: "https://www.instagram.com/",
+          url: a.profileUrl || "https://www.instagram.com/",
           via: [`Instagram “${a.name}”`],
           note: "đăng qua Chrome Extension",
         });
@@ -142,7 +142,7 @@ export async function prepareInstagramQueue(
           recordId,
           kind: "instagram",
           name: a.name,
-          url: "https://www.instagram.com/",
+          url: a.profileUrl || "https://www.instagram.com/",
           via: [`Instagram “${a.name}”`],
           note: "đăng qua Chrome Extension",
         });

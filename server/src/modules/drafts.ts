@@ -1,5 +1,5 @@
 import { defineAction, z } from "@hatch/space-sdk";
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, inArray } from "drizzle-orm";
 import * as schema from "../schema";
 import { buildSku, driveImageSchema, parseDriveImages } from "../services/drive";
 import {
@@ -320,7 +320,31 @@ export const draftCrudActions = {
     response: z.object({ ok: z.boolean() }),
     async handler(ctx, args) {
       const db = ctx.db<typeof schema>();
+
+      // 1. Tìm và xóa sạch toàn bộ post_metrics và post_metric_snapshots liên quan
+      const relatedMetrics = await db
+        .select({ id: schema.postMetrics.id })
+        .from(schema.postMetrics)
+        .where(eq(schema.postMetrics.draftId, args.id));
+
+      if (relatedMetrics.length > 0) {
+        const metricIds = relatedMetrics.map((m) => m.id);
+        await db
+          .delete(schema.postMetricSnapshots)
+          .where(inArray(schema.postMetricSnapshots.postingId, metricIds));
+        await db
+          .delete(schema.postMetrics)
+          .where(inArray(schema.postMetrics.id, metricIds));
+      }
+
+      // 2. Xóa toàn bộ lịch sử đăng bài (publish_records) liên quan đến bản nháp này
+      await db
+        .delete(schema.publishRecords)
+        .where(eq(schema.publishRecords.draftId, args.id));
+
+      // 3. Xóa bản nháp khỏi bảng drafts
       await db.delete(schema.drafts).where(eq(schema.drafts.id, args.id));
+
       ctx.invalidateQueries();
       return { ok: true };
     },

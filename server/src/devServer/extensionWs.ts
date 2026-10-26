@@ -24,6 +24,13 @@ export function registerGlobalExtensionHelpers() {
       } catch {}
     }
   };
+  (globalThis as any).__socialDeskReloadExtensions = () => {
+    for (const ws of allSockets) {
+      try {
+        ws.send(JSON.stringify({ type: "RELOAD_EXTENSION" }));
+      } catch {}
+    }
+  };
   (globalThis as any).__socialDeskSendExtensionTask = async (
     code: string,
     task: any,
@@ -140,24 +147,9 @@ export function handleExtensionWsMessage(
                 `[WebSocket] ✓ Tự động gán mã Chrome [${code}] cho tài khoản Facebook "${existingAccount.name}" (id: ${existingAccount.id})`,
               );
             } else {
-              const autoName = fbName || `Nick Facebook ${code}`;
-              const initialUrl =
-                fbUrl && !/^https?:\/\/(www\.)?facebook\.com\/?$/i.test(fbUrl)
-                  ? fbUrl
-                  : "";
-              sqlite.run(
-                "INSERT INTO accounts (platform, name, handle, profile_url, extension_code, linked, selected, created_at) VALUES (?, ?, ?, ?, ?, 1, 1, ?)",
-                [
-                  "Facebook",
-                  autoName,
-                  "Tài khoản Chrome Extension",
-                  initialUrl,
-                  code,
-                  Date.now(),
-                ],
-              );
+              // TUYỆT ĐỐI KHÔNG TỰ ĐỘNG TẠO TÀI KHOẢN MỚI
               console.log(
-                `[WebSocket] ✓ Tự động tạo tài khoản Facebook: "${autoName}" từ Chrome [${code}]`,
+                `[WebSocket] ℹ Chrome [${code}] đã kết nối. Hệ thống không tự động tạo tài khoản (chờ người dùng gán hoặc thêm thủ công trong mục Tài khoản).`,
               );
             }
           } else if (fbName && rows[0].name !== fbName) {
@@ -176,6 +168,11 @@ export function handleExtensionWsMessage(
         } catch (dbErr) {
           console.warn("[WebSocket] Lỗi đồng bộ tài khoản:", dbErr);
         }
+
+        const clientVersion = (data.version || "").trim();
+        console.log(
+          `[WebSocket] Chrome [${code}] đã đăng ký thành công (v${clientVersion || "unknown"})`,
+        );
 
         ws.send(JSON.stringify({ type: "REGISTER_OK", code, fbName }));
       }

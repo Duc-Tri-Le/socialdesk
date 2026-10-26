@@ -233,6 +233,30 @@ export function getPostLinkInfo(
     };
   }
 
+  // Nếu là bài đăng trên Instagram:
+  if (record.target_kind === "instagram") {
+    const isDirect = /instagram\.com\/(p|reel)\/[^/?#]+/i.test(rawUrl);
+    if (isDirect) {
+      return {
+        url: rawUrl,
+        label: "Xem bài đã đăng",
+        isDirectPost: true,
+      };
+    }
+    const profileUrl =
+      rawUrl.length > 28 && !rawUrl.endsWith("instagram.com/")
+        ? rawUrl
+        : record.target_name
+          ? `https://www.instagram.com/${record.target_name.toLowerCase().replace(/\s+/g, "")}/`
+          : "https://www.instagram.com/ducgarage01/";
+    return {
+      url: profileUrl,
+      label: `Mở Instagram ${record.target_name || ""}`.trim(),
+      isDirectPost: false,
+      hint: "Xem bài viết vừa đăng trên trang cá nhân Instagram",
+    };
+  }
+
   return {
     url: rawUrl,
     label: "Mở liên kết",

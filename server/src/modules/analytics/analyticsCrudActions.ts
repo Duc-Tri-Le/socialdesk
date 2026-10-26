@@ -9,6 +9,7 @@ import {
   extractValidUrl,
   normalizeChannelKey,
   buildPublishUrlMap,
+  ensureMetricsSynced,
   type MetricRow,
 } from "../../services/analytics";
 
@@ -36,6 +37,9 @@ export const analyticsCrudActions = {
     }),
     async handler(ctx, args) {
       const db = ctx.db<typeof schema>();
+      // Tự động đồng bộ các bài đã đăng từ hàng đợi vào bảng chỉ số nếu chưa có
+      await ensureMetricsSynced(db);
+
       const [rows, pubRecords] = await Promise.all([
         db.select().from(schema.postMetrics).orderBy(desc(schema.postMetrics.postedAt)),
         db.select().from(schema.publishRecords).where(eq(schema.publishRecords.status, "published")),

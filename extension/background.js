@@ -102,14 +102,16 @@ async function sendRegistration() {
       stored.fbName = "";
       stored.fbUrl = "";
     }
+    const manifest = chrome.runtime.getManifest();
     socket.send(JSON.stringify({
       type: "REGISTER_EXTENSION",
       code: code,
+      version: manifest?.version || "1.2.6",
       fbName: stored.fbName || "",
       fbUrl: stored.fbUrl || "",
       time: Date.now(),
     }));
-    addLog(`Đã kết nối Chrome [${code}]` + (stored.fbName ? ` (Nick: ${stored.fbName})` : ""), "success");
+    addLog(`Đã kết nối Chrome [${code}] v${manifest?.version || '1.2.6'}` + (stored.fbName ? ` (Nick: ${stored.fbName})` : ""), "success");
   } catch (err) {
     console.error("[Social Desk] Lỗi đăng ký:", err);
   }
@@ -195,6 +197,15 @@ async function connectWebSocket() {
 
         if (msg.type === "RELOAD_EXTENSION") {
           console.log("[Social Desk] Nhận lệnh nạp lại tiện ích từ máy chủ...");
+          try {
+            const stored = await chrome.storage.local.get("lastAutoReloadTime");
+            const now = Date.now();
+            if (stored.lastAutoReloadTime && now - stored.lastAutoReloadTime < 30000) {
+              console.warn("[Social Desk] Tiện ích vừa nạp lại cách đây chưa đầy 30s. Bỏ qua để chống lặp vô tận.");
+              return;
+            }
+            await chrome.storage.local.set({ lastAutoReloadTime: now });
+          } catch {}
           addLog("Đang nạp lại tiện ích theo lệnh máy chủ...", "info");
           chrome.runtime.reload();
           return;
@@ -289,7 +300,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
   }
 
-  if (request.action === "INJECT_LEXICAL_CAPTION") {
+  if (request.action === "INJECT_LEXICAL_CAPTION" || request.action === "INJECT_MAIN_WORLD_IG_CAPTION") {
     const tabId = sender.tab?.id;
     if (!tabId || !request.caption) {
       sendResponse({ success: false });
@@ -300,78 +311,159 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       world: "MAIN",
       func: (text) => {
         try {
+          // 1. Tìm phần tử Lexical editor trong hộp thoại tạo bài viết Instagram
           const el = document.querySelector('div[role="dialog"] div[data-lexical-editor="true"]') ||
                      document.querySelector('div[data-lexical-editor="true"]') ||
                      document.querySelector('div[role="dialog"] div[contenteditable="true"]');
           if (!el) return false;
-          const editor = el.__lexicalEditor;
-          if (editor) { try { editor.focus(); } catch (e) {} } else { el.focus(); }
 
-          const p = el.querySelector("p") || el;
-          try {
-            const range = document.createRange();
-            range.selectNodeContents(p);
-            range.collapse(false);
-            const sel = window.getSelection();
-            sel.removeAllRanges();
-            sel.addRange(range);
-            document.dispatchEvent(new Event("selectionchange"));
-          } catch (e) {}
+          // 2. Tìm đối tượng Lexical Editor instance (từ DOM hoặc React Fiber)
+          function getLexicalEditorInstance(targetEl) {
+            if (targetEl.__lexicalEditor) return targetEl.__lexicalEditor;
+            const container = targetEl.closest('div[data-lexical-editor="true"]') || targetEl;
+            if (container.__lexicalEditor) return container.__lexicalEditor;
 
-          const dt = new DataTransfer();
-          dt.setData("text/plain", text);
-          let pasted = false;
-
-          if (editor && editor._commands) {
-            try {
-              let pasteCmd = null;
-              for (const [cmd] of editor._commands) {
-                if (cmd && (cmd.type === "PASTE_COMMAND" || String(cmd.type).toLowerCase().includes("paste"))) {
-                  pasteCmd = cmd;
-                  break;
+            // Quét React Fiber nếu chưa có trực tiếp trên element
+            const fiberKey = Object.keys(container).find((k) => k.startsWith("__reactFiber$") || k.startsWith("__reactInternalInstance$"));
+            if (fiberKey) {
+              let curr = container[fiberKey];
+              let depth = 0;
+              while (curr && depth < 30) {
+                if (curr.memoizedProps?.editor && typeof curr.memoizedProps.editor.setEditorState === "function") {
+                  return curr.memoizedProps.editor;
                 }
+                if (curr.memoizedProps?.initialEditor && typeof curr.memoizedProps.initialEditor.setEditorState === "function") {
+                  return curr.memoizedProps.initialEditor;
+                }
+                if (curr.stateNode?.__lexicalEditor) {
+                  return curr.stateNode.__lexicalEditor;
+                }
+                let s = curr.memoizedState;
+                while (s) {
+                  if (s.memoizedState?.setEditorState && typeof s.memoizedState.setEditorState === "function") {
+                    return s.memoizedState;
+                  }
+                  if (s.memoizedState?.editor && typeof s.memoizedState.editor.setEditorState === "function") {
+                    return s.memoizedState.editor;
+                  }
+                  s = s.next;
+                }
+                curr = curr.return;
+                depth++;
               }
-              if (pasteCmd) {
-                const fakeEvt = new ClipboardEvent("paste", { bubbles: true, cancelable: true, composed: true, clipboardData: dt });
-                editor.dispatchCommand(pasteCmd, fakeEvt);
-                pasted = true;
-              }
-            } catch (e) {}
+            }
+            return null;
           }
 
-          if (!pasted) {
+          const editor = getLexicalEditorInstance(el);
+          if (editor) {
+            try { editor.focus(); } catch (e) {}
+          } else {
+            el.focus();
+          }
+
+          // 3. Chuẩn bị cấu trúc Lexical State JSON chuẩn xác
+          const lines = text.split(/\r?\n/);
+          const paragraphs = lines.map((line) => {
+            if (!line || line.trim().length === 0) {
+              return {
+                children: [],
+                direction: "ltr",
+                format: "",
+                indent: 0,
+                type: "paragraph",
+                version: 1,
+              };
+            }
+            return {
+              children: [
+                {
+                  detail: 0,
+                  format: 0,
+                  mode: "normal",
+                  style: "",
+                  text: line,
+                  type: "text",
+                  version: 1,
+                },
+              ],
+              direction: "ltr",
+              format: "",
+              indent: 0,
+              type: "paragraph",
+              version: 1,
+            };
+          });
+
+          const lexicalState = {
+            root: {
+              children: paragraphs,
+              direction: "ltr",
+              format: "",
+              indent: 0,
+              type: "root",
+              version: 1,
+            },
+          };
+
+          let appliedViaLexical = false;
+
+          // 4. Nạp trực tiếp qua Lexical Editor API (parseEditorState & setEditorState)
+          if (editor && typeof editor.parseEditorState === "function" && typeof editor.setEditorState === "function") {
             try {
-              const evt = new ClipboardEvent("paste", { bubbles: true, cancelable: true, composed: true, clipboardData: dt });
-              (document.activeElement || el).dispatchEvent(evt);
-            } catch (e) {}
-          }
-
-          const domLen = (el.innerText || el.textContent || "").trim().length;
-          if (domLen < Math.min(text.length * 0.4, 25)) {
-            const lines = text.split(/\r?\n/);
-            for (let i = 0; i < lines.length; i++) {
-              const line = lines[i];
-              if (i > 0) {
-                el.dispatchEvent(new InputEvent("beforeinput", { inputType: "insertParagraph", bubbles: true, cancelable: true }));
-                if (!document.execCommand("insertParagraph", false, null)) document.execCommand("insertLineBreak", false, null);
-              }
-              const d = line.length > 0 ? line : "\u200B";
-              el.dispatchEvent(new InputEvent("beforeinput", { inputType: "insertText", data: d, bubbles: true, cancelable: true }));
-              document.execCommand("insertText", false, d);
+              const parsed = editor.parseEditorState(JSON.stringify(lexicalState));
+              editor.setEditorState(parsed);
+              if (typeof editor.focus === "function") editor.focus();
+              appliedViaLexical = true;
+            } catch (err) {
+              console.warn("[Social Desk] Lỗi setEditorState Lexical:", err);
             }
           }
+
+          // 5. Thử dispatch sự kiện beforeinput và paste với DataTransfer (Native Lexical PASTE_COMMAND)
+          try {
+            const dt = new DataTransfer();
+            dt.setData("text/plain", text);
+            dt.setData("text/html", text.replace(/\n/g, "<br>"));
+
+            const beforeInputEvt = new InputEvent("beforeinput", {
+              inputType: "insertFromPaste",
+              dataTransfer: dt,
+              bubbles: true,
+              cancelable: true,
+              composed: true,
+            });
+            el.dispatchEvent(beforeInputEvt);
+
+            const pasteEvt = new ClipboardEvent("paste", {
+              clipboardData: dt,
+              bubbles: true,
+              cancelable: true,
+              composed: true,
+            });
+            el.dispatchEvent(pasteEvt);
+          } catch (e) {}
+
+          // 6. Phát sự kiện input và change
           el.dispatchEvent(new Event("input", { bubbles: true }));
           el.dispatchEvent(new Event("change", { bubbles: true }));
 
+          // 7. Kiểm tra trạng thái đã được Lexical xác nhận
           let astOk = false;
           if (editor && typeof editor.getEditorState === "function") {
             try {
               const s = JSON.stringify(editor.getEditorState().toJSON());
-              astOk = s.length > 60 && !s.includes('"children":[]');
+              astOk = s.length > 50 && !s.includes('"children":[]') && s.includes(text.slice(0, 10));
             } catch (e) {}
           }
-          return astOk || (el.innerText || el.textContent || "").trim().length >= 10;
-        } catch {
+
+          const lexicalSpans = el.querySelectorAll('span[data-lexical-text="true"]');
+          let spanTextLen = 0;
+          for (const sp of lexicalSpans) spanTextLen += (sp.textContent || "").length;
+
+          return appliedViaLexical || astOk || spanTextLen >= Math.min(text.length * 0.4, 25);
+        } catch (err) {
+          console.error("[Social Desk] Lỗi tiêm caption Lexical:", err);
           return false;
         }
       },

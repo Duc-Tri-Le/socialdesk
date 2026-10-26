@@ -35,9 +35,9 @@ async function ensureContentScriptReady(tabId, maxRetries = 4, isIg = false) {
   return false;
 }
 
-// Xử lý tác vụ đăng bài Facebook an toàn
+// Hàm điều phối chung: Rạch ròi 4 kênh đăng bài độc lập
 async function handlePublishTask(task) {
-  const { taskId, draftId, targetUrl, caption, images = [], targetName } = task;
+  const { taskId, draftId, targetKind = "" } = task;
 
   // 1. Kiểm tra chống trùng lặp Task ID (Idempotency)
   if (isTaskAlreadyHandled(taskId)) {
@@ -47,115 +47,125 @@ async function handlePublishTask(task) {
   }
   runningTaskIds.add(taskId);
 
-  // 2. Xác thực URL đích an toàn (phải thuộc tên miền facebook.com hoặc instagram.com)
-  const safeTargetUrl = (targetUrl || (task.targetKind === "instagram" ? "https://www.instagram.com/" : "https://www.facebook.com/")).trim();
-  let isFb = false;
-  let isIg = false;
+  const kind = targetKind.toLowerCase().trim();
+  console.log(`[Social Desk] Phân loại điều phối kênh: [${kind}] - "${task.targetName || ''}"`);
+
+  if (kind === "page") {
+    return handlePublishToFanpage(task);
+  } else if (kind === "group") {
+    return handlePublishToGroup(task);
+  } else if (kind === "instagram") {
+    return handlePublishToInstagram(task);
+  } else if (kind === "account") {
+    return handlePublishToPersonalAccount(task);
+  } else {
+    // Tự động phân loại dựa trên URL nếu targetKind chưa được truyền chuẩn xác
+    const targetUrl = (task.targetUrl || "").toLowerCase();
+    if (targetUrl.includes("instagram.com")) {
+      return handlePublishToInstagram(task);
+    } else if (targetUrl.includes("/groups/")) {
+      return handlePublishToGroup(task);
+    } else if (targetUrl.includes("facebook.com")) {
+      return handlePublishToFanpage(task);
+    } else {
+      markTaskProcessed(taskId);
+      addLog(`Kênh đăng không hợp lệ: "${kind}"`, "error");
+      sendTaskResult({
+        taskId,
+        draftId,
+        status: "failed",
+        postUrl: "",
+        message: `Kênh đăng không được hỗ trợ: ${kind}`,
+      });
+    }
+  }
+}
+
+// ----------------------------------------------------
+// KÊNH 1: ĐĂNG BÀI LÊN FANPAGE FACEBOOK
+// ----------------------------------------------------
+async function handlePublishToFanpage(task) {
+  const { taskId, draftId, targetUrl, caption, images = [], targetName } = task;
+  const safeTargetUrl = (targetUrl || "https://www.facebook.com/").trim();
+
   try {
     const parsed = new URL(safeTargetUrl);
-    isFb = parsed.hostname.endsWith("facebook.com");
-    isIg = parsed.hostname.endsWith("instagram.com");
-    if (!isFb && !isIg) {
-      throw new Error(`Tên miền không hợp lệ: ${parsed.hostname}. Chỉ chấp nhận facebook.com hoặc instagram.com.`);
+    if (!parsed.hostname.endsWith("facebook.com")) {
+      throw new Error(`URL Fanpage không hợp lệ: ${parsed.hostname}`);
     }
-  } catch (urlErr) {
+  } catch (err) {
     markTaskProcessed(taskId);
-    addLog(`Từ chối URL không an toàn: ${urlErr.message}`, "error");
-    sendTaskResult({
-      taskId,
-      draftId,
-      status: "failed",
-      postUrl: "",
-      message: `Bảo mật: ${urlErr.message}`,
-    });
+    sendTaskResult({ taskId, draftId, status: "failed", postUrl: "", message: err.message });
     return;
   }
 
-  const platformLabel = isIg ? "Instagram" : "Facebook";
-  addLog(`Bắt đầu xử lý đăng bài: "${targetName || platformLabel}"...`, "info");
-
+  addLog(`[Fanpage] Bắt đầu xử lý đăng lên Fanpage: "${targetName || 'Fanpage'}"...`, "info");
   let createdTabId = null;
 
   try {
-    // 3. Mở tab đích
-    const tab = await chrome.tabs.create({
-      url: safeTargetUrl,
-      active: true,
-    });
+    const tab = await chrome.tabs.create({ url: safeTargetUrl, active: true });
     createdTabId = tab.id;
 
-    // 4. Chờ tab hoàn tất tải DOM
     await waitForTabComplete(tab.id, 30000);
-    addLog(`Trang ${platformLabel} đã tải xong, đang kiểm tra giao diện...`, "");
-
-    // Đợi 2.5s để React / editor khởi tạo
+    addLog(`[Fanpage] Trang đã tải, kiểm tra quyền truy cập và ngữ cảnh Fanpage...`, "");
     await new Promise((r) => setTimeout(r, 2500));
 
-    // 5. Kiểm tra & Bắt tay với Content Script
-    const scriptReady = await ensureContentScriptReady(tab.id, 4, isIg);
-    if (!scriptReady) {
-      throw new Error(`Không thể kết nối với script điều khiển trên trang ${platformLabel}. Vui lòng kiểm tra quyền truy cập tab.`);
-    }
+    let scriptReady = await ensureContentScriptReady(tab.id, 4, false);
+    if (!scriptReady) throw new Error("Không thể kết nối với script điều khiển trên tab Facebook.");
 
-    // 6. Gửi lệnh đăng bài kèm thời gian chờ tối đa (90s), tự động bắt tay lại nếu trang điều hướng
-    async function executePostWithRetry(targetTabId) {
-      for (let attempt = 1; attempt <= 2; attempt++) {
-        try {
-          const res = await new Promise((resolve, reject) => {
-            chrome.tabs.sendMessage(
-              targetTabId,
-              {
-                action: "DO_POST",
-                payload: {
-                  caption,
-                  images,
-                  targetUrl: safeTargetUrl,
-                  targetKind: task.targetKind || (isIg ? "instagram" : "page"),
-                  targetName: task.targetName || "",
-                  taskId,
-                },
-              },
-              (r) => {
-                if (chrome.runtime.lastError) {
-                  reject(new Error(chrome.runtime.lastError.message || `Mất liên lạc với trang ${platformLabel}`));
-                } else {
-                  resolve(r || { success: false, message: `Không nhận được phản hồi kết quả từ ${platformLabel}` });
-                }
-              }
-            );
-          });
-          return res;
-        } catch (err) {
-          const isChannelClosed = err.message && (
-            err.message.includes("message channel closed") ||
-            err.message.includes("Could not establish connection")
-          );
-          if (isChannelClosed && attempt < 2) {
-            addLog(`Trang ${platformLabel} chuyển trang hoặc tải lại, đang kết nối lại...`, "info");
-            await waitForTabComplete(targetTabId, 15000);
-            await new Promise((r) => setTimeout(r, 2000));
-            const ready = await ensureContentScriptReady(targetTabId, 4, isIg);
-            if (ready) continue;
-          }
-          throw err;
-        }
-      }
-    }
-
-    const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error("Quá thời gian xử lý đăng bài (90 giây).")), 90000);
+    // Bước kiểm tra chuyển đổi Profile Fanpage an toàn (Pre-flight handshake)
+    // Nếu Facebook có nút "Chuyển ngay" sang Page, bấm chuyển và đợi trang tải lại trước khi gửi lệnh đăng
+    const prepRes = await new Promise((resolve) => {
+      chrome.tabs.sendMessage(tab.id, { action: "PREPARE_FANPAGE_CONTEXT", targetName: targetName || "" }, (r) => {
+        if (chrome.runtime.lastError || !r) resolve({ needsSwitch: false });
+        else resolve(r);
+      });
     });
 
-    const response = await Promise.race([executePostWithRetry(tab.id), timeoutPromise]);
+    if (prepRes && prepRes.needsSwitch) {
+      addLog(`[Fanpage] Đang chuyển đổi sang Profile Fanpage "${targetName}"...`, "info");
+      await new Promise((r) => setTimeout(r, 1500));
+      await waitForTabComplete(tab.id, 25000, false);
+      await new Promise((r) => setTimeout(r, 3000));
+      scriptReady = await ensureContentScriptReady(tab.id, 4, false);
+      if (!scriptReady) throw new Error("Mất kết nối script điều khiển sau khi chuyển sang Profile Fanpage.");
+    }
+
+    // Gửi lệnh đăng chuyên biệt cho Fanpage
+    let response = await executeTabPostAction(tab.id, "DO_FANPAGE_POST", {
+      caption,
+      images,
+      targetUrl: safeTargetUrl,
+      targetKind: "page",
+      targetName: targetName || "",
+      taskId,
+    }, false);
+
+    // Nếu response báo needsSwitch = true (phát hiện nút chuyển muộn trong DO_FANPAGE_POST)
+    if (response && response.needsSwitch) {
+      addLog(`[Fanpage] Nhận diện yêu cầu chuyển Profile Fanpage "${targetName}", đang chuyển...`, "info");
+      await new Promise((r) => setTimeout(r, 1500));
+      await waitForTabComplete(tab.id, 25000, false);
+      await new Promise((r) => setTimeout(r, 3000));
+      scriptReady = await ensureContentScriptReady(tab.id, 4, false);
+      if (!scriptReady) throw new Error("Mất kết nối script điều khiển sau khi chuyển Profile Fanpage.");
+
+      response = await executeTabPostAction(tab.id, "DO_FANPAGE_POST", {
+        caption,
+        images,
+        targetUrl: safeTargetUrl,
+        targetKind: "page",
+        targetName: targetName || "",
+        taskId,
+      }, false);
+    }
 
     markTaskProcessed(taskId);
 
-    // 7. Báo cáo kết quả chi tiết về máy chủ
     if (response.success) {
-      const extraMsg = response.pendingApproval ? " (Đang chờ Quản trị viên duyệt)" : "";
-      addLog(`✓ Đăng bài thành công lên "${targetName || 'Facebook'}"${extraMsg}`, "success");
+      addLog(`✓ [Fanpage] Đăng bài thành công lên Fanpage "${targetName || 'Facebook'}"`, "success");
     } else {
-      addLog(`✗ Đăng bài thất bại: ${response.message}`, "error");
+      addLog(`✗ [Fanpage] Đăng bài thất bại: ${response.message}`, "error");
     }
 
     sendTaskResult({
@@ -163,36 +173,288 @@ async function handlePublishTask(task) {
       draftId,
       status: response.success ? "published" : "failed",
       postUrl: response.postUrl || safeTargetUrl,
-      message: response.message || (response.success ? "Đã đăng bài thành công" : "Lỗi không xác định"),
-      pendingApproval: !!response.pendingApproval,
+      message: response.message || (response.success ? "Đã đăng bài thành công lên Fanpage" : "Lỗi đăng Fanpage"),
     });
 
   } catch (err) {
     markTaskProcessed(taskId);
-    addLog(`Lỗi xử lý tác vụ #${taskId}: ${err.message}`, "error");
+    addLog(`[Fanpage] Lỗi tác vụ #${taskId}: ${err.message}`, "error");
     sendTaskResult({
       taskId,
       draftId,
       status: "failed",
       postUrl: "",
-      message: `Lỗi Extension Chrome: ${err.message}`,
+      message: `Lỗi đăng Fanpage: ${err.message}`,
     });
   }
 }
 
-// Xử lý quét chỉ số tương tác bài viết Facebook
+// ----------------------------------------------------
+// KÊNH 2: ĐĂNG BÀI VÀO NHÓM FACEBOOK (GROUP)
+// ----------------------------------------------------
+async function handlePublishToGroup(task) {
+  const { taskId, draftId, targetUrl, caption, images = [], targetName } = task;
+  const safeTargetUrl = (targetUrl || "https://www.facebook.com/groups/").trim();
+
+  try {
+    const parsed = new URL(safeTargetUrl);
+    if (!parsed.hostname.endsWith("facebook.com")) {
+      throw new Error(`URL Nhóm không hợp lệ: ${parsed.hostname}`);
+    }
+  } catch (err) {
+    markTaskProcessed(taskId);
+    sendTaskResult({ taskId, draftId, status: "failed", postUrl: "", message: err.message });
+    return;
+  }
+
+  addLog(`[Nhóm] Bắt đầu xử lý đăng vào Nhóm: "${targetName || 'Hội nhóm'}"...`, "info");
+
+  try {
+    const tab = await chrome.tabs.create({ url: safeTargetUrl, active: true });
+    await waitForTabComplete(tab.id, 30000);
+    await new Promise((r) => setTimeout(r, 2500));
+
+    const scriptReady = await ensureContentScriptReady(tab.id, 4, false);
+    if (!scriptReady) throw new Error("Không thể kết nối với script điều khiển trên tab Nhóm Facebook.");
+
+    // Gửi lệnh đăng chuyên biệt cho Nhóm
+    const response = await executeTabPostAction(tab.id, "DO_GROUP_POST", {
+      caption,
+      images,
+      targetUrl: safeTargetUrl,
+      targetKind: "group",
+      targetName: targetName || "",
+      taskId,
+    }, false);
+
+    markTaskProcessed(taskId);
+
+    const extraMsg = response.pendingApproval ? " (Đang chờ Quản trị viên duyệt)" : "";
+    if (response.success) {
+      addLog(`✓ [Nhóm] Đăng bài thành công vào nhóm "${targetName || 'Facebook'}"${extraMsg}`, "success");
+    } else {
+      addLog(`✗ [Nhóm] Đăng bài vào nhóm thất bại: ${response.message}`, "error");
+    }
+
+    sendTaskResult({
+      taskId,
+      draftId,
+      status: response.success ? "published" : "failed",
+      postUrl: response.postUrl || safeTargetUrl,
+      message: response.message || (response.success ? `Đã đăng bài vào nhóm${extraMsg}` : "Lỗi đăng Nhóm"),
+      pendingApproval: !!response.pendingApproval,
+    });
+
+  } catch (err) {
+    markTaskProcessed(taskId);
+    addLog(`[Nhóm] Lỗi tác vụ #${taskId}: ${err.message}`, "error");
+    sendTaskResult({
+      taskId,
+      draftId,
+      status: "failed",
+      postUrl: "",
+      message: `Lỗi đăng Nhóm Facebook: ${err.message}`,
+    });
+  }
+}
+
+// ----------------------------------------------------
+// KÊNH 3: ĐĂNG BÀI LÊN TÀI KHOẢN CHÍNH / TRANG CÁ NHÂN FACEBOOK
+// ----------------------------------------------------
+async function handlePublishToPersonalAccount(task) {
+  const { taskId, draftId, targetUrl, caption, images = [], targetName } = task;
+  const safeTargetUrl = (targetUrl || "https://www.facebook.com/").trim();
+
+  try {
+    const parsed = new URL(safeTargetUrl);
+    if (!parsed.hostname.endsWith("facebook.com")) {
+      throw new Error(`URL Facebook không hợp lệ: ${parsed.hostname}`);
+    }
+  } catch (err) {
+    markTaskProcessed(taskId);
+    sendTaskResult({ taskId, draftId, status: "failed", postUrl: "", message: err.message });
+    return;
+  }
+
+  addLog(`[Cá nhân] Bắt đầu đăng lên Trang cá nhân: "${targetName || 'Facebook'}"...`, "info");
+
+  try {
+    const tab = await chrome.tabs.create({ url: safeTargetUrl, active: true });
+    await waitForTabComplete(tab.id, 30000);
+    await new Promise((r) => setTimeout(r, 2500));
+
+    const scriptReady = await ensureContentScriptReady(tab.id, 4, false);
+    if (!scriptReady) throw new Error("Không thể kết nối với script điều khiển trên tab Facebook.");
+
+    // Gửi lệnh đăng chuyên biệt cho Trang cá nhân
+    const response = await executeTabPostAction(tab.id, "DO_PERSONAL_ACCOUNT_POST", {
+      caption,
+      images,
+      targetUrl: safeTargetUrl,
+      targetKind: "account",
+      targetName: targetName || "",
+      taskId,
+    }, false);
+
+    markTaskProcessed(taskId);
+
+    if (response.success) {
+      addLog(`✓ [Cá nhân] Đăng bài thành công lên Trang cá nhân "${targetName || 'Facebook'}"`, "success");
+    } else {
+      addLog(`✗ [Cá nhân] Đăng bài thất bại: ${response.message}`, "error");
+    }
+
+    sendTaskResult({
+      taskId,
+      draftId,
+      status: response.success ? "published" : "failed",
+      postUrl: response.postUrl || safeTargetUrl,
+      message: response.message || (response.success ? "Đã đăng bài lên trang cá nhân" : "Lỗi đăng cá nhân"),
+    });
+
+  } catch (err) {
+    markTaskProcessed(taskId);
+    addLog(`[Cá nhân] Lỗi tác vụ #${taskId}: ${err.message}`, "error");
+    sendTaskResult({
+      taskId,
+      draftId,
+      status: "failed",
+      postUrl: "",
+      message: `Lỗi đăng Trang cá nhân Facebook: ${err.message}`,
+    });
+  }
+}
+
+// ----------------------------------------------------
+// KÊNH 4: ĐĂNG BÀI LÊN INSTAGRAM
+// ----------------------------------------------------
+async function handlePublishToInstagram(task) {
+  const { taskId, draftId, targetUrl, caption, images = [], targetName } = task;
+  const safeTargetUrl = (targetUrl || "https://www.instagram.com/").trim();
+
+  try {
+    const parsed = new URL(safeTargetUrl);
+    if (!parsed.hostname.endsWith("instagram.com")) {
+      throw new Error(`URL Instagram không hợp lệ: ${parsed.hostname}`);
+    }
+  } catch (err) {
+    markTaskProcessed(taskId);
+    sendTaskResult({ taskId, draftId, status: "failed", postUrl: "", message: err.message });
+    return;
+  }
+
+  addLog(`[Instagram] Bắt đầu đăng bài lên Instagram: "${targetName || 'Instagram'}"...`, "info");
+
+  try {
+    const tab = await chrome.tabs.create({ url: safeTargetUrl, active: true });
+    await waitForTabComplete(tab.id, 30000);
+    await new Promise((r) => setTimeout(r, 2500));
+
+    const scriptReady = await ensureContentScriptReady(tab.id, 4, true);
+    if (!scriptReady) throw new Error("Không thể kết nối với script điều khiển trên tab Instagram.");
+
+    // Gửi lệnh đăng chuyên biệt cho Instagram
+    const response = await executeTabPostAction(tab.id, "DO_INSTAGRAM_POST", {
+      caption,
+      images,
+      targetUrl: safeTargetUrl,
+      profileUrl: task.profileUrl || safeTargetUrl,
+      targetKind: "instagram",
+      targetName: targetName || "",
+      taskId,
+    }, true);
+
+    markTaskProcessed(taskId);
+
+    if (response.success) {
+      addLog(`✓ [Instagram] Đăng bài thành công lên Instagram "${targetName || 'Instagram'}"`, "success");
+    } else {
+      addLog(`✗ [Instagram] Đăng bài thất bại: ${response.message}`, "error");
+    }
+
+    sendTaskResult({
+      taskId,
+      draftId,
+      status: response.success ? "published" : "failed",
+      postUrl: response.postUrl || safeTargetUrl,
+      message: response.message || (response.success ? "Đã đăng bài lên Instagram" : "Lỗi đăng Instagram"),
+    });
+
+  } catch (err) {
+    markTaskProcessed(taskId);
+    addLog(`[Instagram] Lỗi tác vụ #${taskId}: ${err.message}`, "error");
+    sendTaskResult({
+      taskId,
+      draftId,
+      status: "failed",
+      postUrl: "",
+      message: `Lỗi đăng Instagram: ${err.message}`,
+    });
+  }
+}
+
+// Hàm hỗ trợ gửi lệnh đăng và tự động kết nối lại nếu trang điều hướng
+async function executeTabPostAction(targetTabId, actionName, payload, isIg = false, timeoutMs = 90000) {
+  const platformLabel = isIg ? "Instagram" : "Facebook";
+
+  const actionPromise = (async () => {
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const res = await new Promise((resolve, reject) => {
+          chrome.tabs.sendMessage(
+            targetTabId,
+            { action: actionName, payload },
+            (r) => {
+              if (chrome.runtime.lastError) {
+                reject(new Error(chrome.runtime.lastError.message || `Mất liên lạc với trang ${platformLabel}`));
+              } else {
+                resolve(r || { success: false, message: `Không nhận được phản hồi kết quả từ ${platformLabel}` });
+              }
+            }
+          );
+        });
+        return res;
+      } catch (err) {
+        const isChannelClosed = err.message && (
+          err.message.includes("message channel closed") ||
+          err.message.includes("Could not establish connection")
+        );
+        if (isChannelClosed && attempt < 3) {
+          addLog(`Trang ${platformLabel} đang chuyển trang / tải lại, đợi trang ổn định (lần ${attempt})...`, "info");
+          await new Promise((r) => setTimeout(r, 2000));
+          await waitForTabComplete(targetTabId, 25000, false);
+          await new Promise((r) => setTimeout(r, 2500));
+          const ready = await ensureContentScriptReady(targetTabId, 4, isIg);
+          if (ready) continue;
+        }
+        throw err;
+      }
+    }
+  })();
+
+  const timeoutPromise = new Promise((_, reject) => {
+    setTimeout(() => reject(new Error(`Quá thời gian xử lý đăng bài trên ${platformLabel} (90 giây).`)), timeoutMs);
+  });
+
+  return await Promise.race([actionPromise, timeoutPromise]);
+}
+
+// Xử lý quét chỉ số tương tác bài viết Facebook và Instagram
 async function handleScanMetricsTask(task) {
   const { taskId, postUrl } = task;
   if (!postUrl) {
     sendTaskResult({
       taskId,
       status: "failed",
-      message: "Không có URL bài viết Facebook để quét",
+      message: "Không có URL bài viết để quét",
     });
     return;
   }
 
-  addLog(`Bắt đầu quét chỉ số bài viết Facebook...`, "info");
+  const isIg = (postUrl || "").includes("instagram.com");
+  const platformLabel = isIg ? "Instagram" : "Facebook";
+
+  addLog(`Bắt đầu quét chỉ số bài viết ${platformLabel}...`, "info");
   let createdTabId = null;
 
   try {
@@ -200,13 +462,22 @@ async function handleScanMetricsTask(task) {
     createdTabId = tab.id;
 
     await waitForTabComplete(createdTabId, 25000);
-    // Chờ 2 giây để giao diện Facebook hiển thị đầy đủ các nút tương tác
-    await new Promise((r) => setTimeout(r, 2000));
+    // Chờ 3 giây để giao diện tải đầy đủ các nút tương tác
+    await new Promise((r) => setTimeout(r, 3000));
 
-    const ready = await ensureContentScriptReady(createdTabId, 4);
+    const ready = await ensureContentScriptReady(createdTabId, 4, isIg);
     if (!ready) {
-      throw new Error("Không thể kết nối với trang Facebook để đọc chỉ số");
+      throw new Error(`Không thể kết nối với trang ${platformLabel} để đọc chỉ số`);
     }
+
+    // Cuộn nhẹ một đoạn để kích hoạt tải dữ liệu tương tác lười (lazy load) nếu là Feed
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId: createdTabId },
+        func: () => { window.scrollBy(0, 350); },
+      });
+      await new Promise((r) => setTimeout(r, 700));
+    } catch (e) {}
 
     const metrics = await new Promise((resolve, reject) => {
       chrome.tabs.sendMessage(createdTabId, { action: "SCRAPE_POST_METRICS" }, (res) => {
@@ -219,7 +490,7 @@ async function handleScanMetricsTask(task) {
     });
 
     addLog(
-      `✓ Đã quét chỉ số: ${metrics.likes || 0} Like, ${metrics.comments || 0} Bình luận, ${metrics.shares || 0} Chia sẻ`,
+      `✓ Đã quét chỉ số ${platformLabel}: ${metrics.likes || 0} Like, ${metrics.comments || 0} Bình luận, ${metrics.shares || 0} Chia sẻ`,
       "success"
     );
 
@@ -230,10 +501,11 @@ async function handleScanMetricsTask(task) {
       comments: metrics.comments || 0,
       shares: metrics.shares || 0,
       reach: metrics.reach || 0,
-      message: "Quét tương tác bài viết thành công",
+      postUrl: metrics.postUrl || postUrl,
+      message: `Quét tương tác bài viết ${platformLabel} thành công`,
     });
   } catch (err) {
-    addLog(`✗ Lỗi quét chỉ số: ${err.message}`, "error");
+    addLog(`✗ Lỗi quét chỉ số ${platformLabel}: ${err.message}`, "error");
     sendTaskResult({
       taskId,
       status: "failed",
@@ -261,16 +533,18 @@ function sendTaskResult(data) {
   }
 }
 
-function waitForTabComplete(tabId, timeoutMs = 25000) {
+function waitForTabComplete(tabId, timeoutMs = 25000, checkImmediate = true) {
   return new Promise((resolve) => {
     let resolved = false;
 
-    chrome.tabs.get(tabId, (tab) => {
-      if (!chrome.runtime.lastError && tab && tab.status === "complete") {
-        cleanup();
-        resolve();
-      }
-    });
+    if (checkImmediate) {
+      chrome.tabs.get(tabId, (tab) => {
+        if (!chrome.runtime.lastError && tab && tab.status === "complete") {
+          cleanup();
+          resolve();
+        }
+      });
+    }
 
     function listener(id, info) {
       if (id === tabId && info.status === "complete") {

@@ -1,42 +1,75 @@
+import fs from "node:fs";
+import path from "node:path";
 import type { DraftFields } from "../services/copywriting/copywritingTypes";
 import { buildCaption } from "../services/copywriting/templateWriter";
+
+function getGeminiApiKey(): string {
+  let key = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || "";
+  if (!key) {
+    try {
+      const envPath = path.join(process.cwd(), ".env");
+      if (fs.existsSync(envPath)) {
+        const content = fs.readFileSync(envPath, "utf-8");
+        for (const line of content.split("\n")) {
+          const match = line.match(/^\s*(?:GEMINI_API_KEY|GOOGLE_API_KEY)\s*=\s*(["']?)(.*?)\1\s*$/);
+          if (match && match[2]) {
+            key = match[2].trim();
+            process.env.GEMINI_API_KEY = key;
+            break;
+          }
+        }
+      }
+    } catch {}
+  }
+  return key;
+}
 
 export async function localAiInferenceComplete(
   prompt: string,
   _opts?: any,
 ): Promise<{ caption: string }> {
   // 1. Kiểm tra biến môi trường Gemini API nếu người dùng cấu hình
-  const geminiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+  const geminiKey = getGeminiApiKey();
   if (geminiKey) {
-    try {
-      const resp = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: {
-              responseMimeType: "application/json",
-              responseSchema: {
-                type: "object",
-                properties: { caption: { type: "string" } },
-                required: ["caption"],
+    console.log("[Local AI] 🚀 Đang kết nối Google Gemini API để viết bài sáng tạo...");
+    const candidateModels = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"];
+    for (const model of candidateModels) {
+      try {
+        const resp = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: prompt }] }],
+              generationConfig: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                  type: "object",
+                  properties: { caption: { type: "string" } },
+                  required: ["caption"],
+                },
               },
-            },
-          }),
-        },
-      );
-      if (resp.ok) {
-        const data = (await resp.json()) as any;
-        const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (text) {
-          const parsed = JSON.parse(text);
-          if (parsed.caption) return parsed;
+            }),
+          },
+        );
+        if (resp.ok) {
+          const data = (await resp.json()) as any;
+          const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (text) {
+            const parsed = JSON.parse(text);
+            if (parsed.caption) {
+              console.log(`[Local AI] ✓ Google Gemini (${model}) đã viết xong bài viết thành công!`);
+              return parsed;
+            }
+          }
+        } else {
+          const errData = (await resp.json().catch(() => null)) as any;
+          console.warn(`[Local AI] Thử model ${model} trả về status ${resp.status}:`, errData?.error?.message || resp.statusText);
         }
+      } catch (e: any) {
+        console.warn(`[Local AI] Lỗi gọi Gemini API (${model}):`, e?.message || e);
       }
-    } catch (e) {
-      console.warn("[Local AI] Lỗi gọi Gemini API:", e);
     }
   }
 
