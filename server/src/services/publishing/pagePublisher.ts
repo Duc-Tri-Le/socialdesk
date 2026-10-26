@@ -35,15 +35,15 @@ export async function publishToPages(
   const allPages = await db.select().from(schema.fbPages);
   const chosenPages = allPages.filter((p) => pageIds.includes(p.id));
   let fbPages: FbPageRef[] | null = null;
-  let fbPagesError = "";
+  let _fbPagesError = "";
 
   if (chosenPages.length > 0) {
     try {
       const res = await ctx.executePrivileged(privileged.listFbPages, {});
       if (res.ok) fbPages = parseFbPages(res.stdout);
-      else fbPagesError = cliErrorText(res);
+      else _fbPagesError = cliErrorText(res);
     } catch (e) {
-      fbPagesError = e instanceof Error ? e.message : String(e);
+      _fbPagesError = e instanceof Error ? e.message : String(e);
     }
   }
 
@@ -88,12 +88,20 @@ export async function publishToPages(
       continue;
     }
     if (!fbPages) {
-      await helpers.record({
+      const recordId = await helpers.record({
         kind: "page",
         name: p.name,
-        status: "failed",
-        message: `${label}: không đọc được danh sách Page từ Facebook${fbPagesError ? ` — ${fbPagesError}` : ""}. Kiểm tra kết nối Facebook rồi thử lại.`,
+        status: "queued",
+        message: `${label}: đang mở Fanpage trên Chrome để tự động đăng bài...`,
         post_url: "",
+      });
+      browserQueue.push({
+        recordId,
+        kind: "page",
+        name: p.name,
+        url: p.url,
+        via: [`Page “${p.name}”`],
+        note: _fbPagesError ? `đăng qua Chrome Extension (${_fbPagesError})` : "đăng qua Chrome Extension",
       });
       continue;
     }
@@ -101,12 +109,20 @@ export async function publishToPages(
       (fp) => normalizeNameKey(fp.name) === normalizeNameKey(p.name),
     );
     if (!match) {
-      await helpers.record({
+      const recordId = await helpers.record({
         kind: "page",
         name: p.name,
-        status: "failed",
-        message: `${label}: không thấy Page này trong các Page tài khoản Facebook đã liên kết đang quản trị — kiểm tra lại tên Page ở mục Tài khoản.`,
+        status: "queued",
+        message: `${label}: đang mở Fanpage trên Chrome để tự động đăng bài...`,
         post_url: "",
+      });
+      browserQueue.push({
+        recordId,
+        kind: "page",
+        name: p.name,
+        url: p.url,
+        via: [`Page “${p.name}”`],
+        note: "đăng qua Chrome Extension",
       });
       continue;
     }
@@ -134,21 +150,37 @@ export async function publishToPages(
           post_url: ref.url,
         });
       } else {
-        await helpers.record({
+        const recordId = await helpers.record({
           kind: "page",
           name: p.name,
-          status: "failed",
-          message: `${label}: đăng không thành công — ${cliErrorText(res) || "Facebook không trả lý do"}. Nếu chưa chắc bài đã lên hay chưa, kiểm tra Page trước khi bấm đăng lại.`,
+          status: "queued",
+          message: `${label}: chuyển sang đăng bằng Chrome Extension...`,
           post_url: ref.url,
+        });
+        browserQueue.push({
+          recordId,
+          kind: "page",
+          name: p.name,
+          url: p.url,
+          via: [`Page “${p.name}”`],
+          note: "đăng qua Chrome Extension",
         });
       }
     } catch (e) {
-      await helpers.record({
+      const recordId = await helpers.record({
         kind: "page",
         name: p.name,
-        status: "failed",
-        message: `${label}: lỗi khi gọi đăng bài — ${e instanceof Error ? e.message.slice(0, 300) : "không rõ"}. Kiểm tra Page trước khi bấm đăng lại để tránh trùng.`,
+        status: "queued",
+        message: `${label}: API không khả dụng, đang mở Chrome để tự động đăng bài...`,
         post_url: "",
+      });
+      browserQueue.push({
+        recordId,
+        kind: "page",
+        name: p.name,
+        url: p.url,
+        via: [`Page “${p.name}”`],
+        note: "đăng qua Chrome Extension",
       });
     }
   }

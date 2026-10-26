@@ -10,11 +10,33 @@ let heartbeatTimer = null;
 let pongTimeoutTimer = null;
 let reconnectAttempts = 0;
 
-const MIN_RECONNECT_MS = 2000;
-const MAX_RECONNECT_MS = 30000;
-const HEARTBEAT_INTERVAL_MS = 25000;
-const PONG_TIMEOUT_MS = 12000;
+let missedPongCount = 0;
+
+const MIN_RECONNECT_MS = 1500;
+const MAX_RECONNECT_MS = 20000;
+const HEARTBEAT_INTERVAL_MS = 20000;
+const PONG_TIMEOUT_MS = 25000;
 const MAX_LOGS = 50;
+
+function generateDefaultCode() {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let randomPart = "";
+  for (let i = 0; i < 4; i++) {
+    randomPart += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return `SD-${randomPart}`;
+}
+
+async function getOrCreateExtensionCode() {
+  const data = await chrome.storage.local.get("extensionCode");
+  let code = (data.extensionCode || "").trim().toUpperCase();
+  if (!code) {
+    code = generateDefaultCode();
+    await chrome.storage.local.set({ extensionCode: code });
+    addLog(`Đã tự động khởi tạo mã nhận diện: [${code}]`, "info");
+  }
+  return code;
+}
 
 // Bộ nhớ đệm chống xử lý trùng lặp Task ID (Idempotency)
 const processedTaskIds = new Set();
@@ -70,6 +92,29 @@ async function getWsUrl() {
   return base.replace(/^http:\/\//, "ws://") + "/ws";
 }
 
+async function sendRegistration() {
+  if (!socket || socket.readyState !== WebSocket.OPEN) return;
+  try {
+    const code = await getOrCreateExtensionCode();
+    const stored = await chrome.storage.local.get(["fbName", "fbUrl"]);
+    if (stored.fbName && /công cụ|kế hoạch|planner|quản trị|quản lý|chưa đọc/i.test(stored.fbName)) {
+      await chrome.storage.local.remove(["fbName", "fbUrl"]);
+      stored.fbName = "";
+      stored.fbUrl = "";
+    }
+    socket.send(JSON.stringify({
+      type: "REGISTER_EXTENSION",
+      code: code,
+      fbName: stored.fbName || "",
+      fbUrl: stored.fbUrl || "",
+      time: Date.now(),
+    }));
+    addLog(`Đã kết nối Chrome [${code}]` + (stored.fbName ? ` (Nick: ${stored.fbName})` : ""), "success");
+  } catch (err) {
+    console.error("[Social Desk] Lỗi đăng ký:", err);
+  }
+}
+
 function scheduleReconnect() {
   if (reconnectTimer) clearTimeout(reconnectTimer);
   const factor = Math.min(reconnectAttempts, 6);
@@ -92,8 +137,6 @@ async function connectWebSocket() {
   if (pongTimeoutTimer) clearTimeout(pongTimeoutTimer);
 
   const wsUrl = await getWsUrl();
-  const data = await chrome.storage.local.get("extensionCode");
-  const code = (data.extensionCode || "").trim().toUpperCase();
 
   try {
     socket = new WebSocket(wsUrl);
@@ -104,32 +147,23 @@ async function connectWebSocket() {
       updateBadge(true);
       addLog(`Đã kết nối Social Desk tại ${wsUrl}`, "success");
 
-      // Đăng ký mã Chrome này với máy chủ kèm tên nick Facebook nếu có
-      chrome.storage.local.get(["extensionCode", "fbName", "fbUrl"]).then((stored) => {
-        const c = (stored.extensionCode || code || "").trim().toUpperCase();
-        if (c && socket && socket.readyState === WebSocket.OPEN) {
-          socket.send(JSON.stringify({
-            type: "REGISTER_EXTENSION",
-            code: c,
-            fbName: stored.fbName || "",
-            fbUrl: stored.fbUrl || "",
-            time: Date.now()
-          }));
-          addLog(`Đã đăng ký mã nhận diện: [${c}]` + (stored.fbName ? ` (Nick: ${stored.fbName})` : ""), "success");
-        }
-      });
+      // Đăng ký mã Chrome này với máy chủ ngay khi kết nối
+      missedPongCount = 0;
+      sendRegistration();
 
       // Khởi động chu kỳ Heartbeat PING/PONG kiểm tra kết nối sống
       heartbeatTimer = setInterval(() => {
         if (socket && socket.readyState === WebSocket.OPEN) {
           try {
             socket.send(JSON.stringify({ type: "PING", time: Date.now() }));
-            // Đặt hẹn giờ kiểm tra PONG phản hồi
             if (pongTimeoutTimer) clearTimeout(pongTimeoutTimer);
             pongTimeoutTimer = setTimeout(() => {
-              console.warn("[Social Desk] Không nhận được PONG từ server, ngắt kết nối để thử lại...");
-              if (socket) {
-                try { socket.close(); } catch (e) {}
+              missedPongCount++;
+              if (missedPongCount >= 2) {
+                console.warn("[Social Desk] Quá thời gian chờ PONG từ server 2 lần, kết nối lại...");
+                if (socket) {
+                  try { socket.close(); } catch (e) {}
+                }
               }
             }, PONG_TIMEOUT_MS);
           } catch (e) {
@@ -144,12 +178,25 @@ async function connectWebSocket() {
         const msg = JSON.parse(event.data);
 
         if (msg.type === "PONG") {
+          missedPongCount = 0;
           if (pongTimeoutTimer) clearTimeout(pongTimeoutTimer);
           return;
         }
 
+        if (msg.type === "REQUEST_REGISTRATION") {
+          sendRegistration();
+          return;
+        }
+
         if (msg.type === "REGISTER_OK") {
-          addLog(`Máy chủ đã sẵn sàng cho mã [${msg.code}]`, "success");
+          addLog(`Máy chủ đã xác nhận mã [${msg.code}] sẵn sàng!`, "success");
+          return;
+        }
+
+        if (msg.type === "RELOAD_EXTENSION") {
+          console.log("[Social Desk] Nhận lệnh nạp lại tiện ích từ máy chủ...");
+          addLog("Đang nạp lại tiện ích theo lệnh máy chủ...", "info");
+          chrome.runtime.reload();
           return;
         }
 
@@ -183,31 +230,33 @@ async function connectWebSocket() {
   }
 }
 
+// Tự động gửi lại đăng ký khi mã extension thay đổi trong storage
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === "local" && changes.extensionCode) {
+    const newCode = (changes.extensionCode.newValue || "").trim().toUpperCase();
+    if (newCode && socket && socket.readyState === WebSocket.OPEN) {
+      sendRegistration();
+    }
+  }
+});
+
 // Lắng nghe message từ Popup và Content Script
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "FB_PROFILE_DETECTED") {
     const { fbName, fbUrl } = request;
-    if (fbName) {
+    if (fbName && !/công cụ|kế hoạch|planner|quản trị|quản lý|chưa đọc/i.test(fbName)) {
       chrome.storage.local.set({ fbName, fbUrl });
       addLog(`Phát hiện nick Facebook: ${fbName}`, "success");
-    }
-    // Gửi cập nhật tên nick lên server ngay
-    if (socket && socket.readyState === WebSocket.OPEN) {
-      chrome.storage.local.get(["extensionCode"]).then((data) => {
-        const code = (data.extensionCode || "").trim().toUpperCase();
-        if (code) {
-          socket.send(JSON.stringify({
-            type: "REGISTER_EXTENSION",
-            code: code,
-            fbName: fbName || "",
-            fbUrl: fbUrl || "",
-            time: Date.now(),
-          }));
-        }
-      });
+      sendRegistration();
     }
     sendResponse({ received: true });
-    return true;
+    return false;
+  }
+
+  if (request.action === "REGISTER") {
+    sendRegistration();
+    sendResponse({ ok: true });
+    return false;
   }
 
   if (request.action === "GET_STATUS") {
@@ -245,7 +294,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
     connectWebSocket();
     sendResponse({ ok: true });
-    return true;
+    return false;
   }
 });
 

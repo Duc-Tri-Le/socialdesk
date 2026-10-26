@@ -8,6 +8,7 @@ import {
   type ExtensionWsData,
   extensionSockets,
   registerGlobalExtensionHelpers,
+  handleExtensionWsOpen,
   handleExtensionWsMessage,
   handleExtensionWsClose,
 } from "./server/src/devServer/extensionWs";
@@ -77,6 +78,7 @@ const PORT = Number(process.env.PORT) || 3000;
 
 const server = Bun.serve<ExtensionWsData>({
   port: PORT,
+  idleTimeout: 0,
   async fetch(req, serverInstance) {
     const url = new URL(req.url);
 
@@ -103,6 +105,23 @@ const server = Bun.serve<ExtensionWsData>({
           },
         },
       );
+    }
+
+    // Endpoint kích hoạt nạp lại Extension từ xa
+    if (url.pathname === "/api/reload-extensions") {
+      let count = 0;
+      for (const [, ws] of extensionSockets.entries()) {
+        try {
+          ws.send(JSON.stringify({ type: "RELOAD_EXTENSION" }));
+          count++;
+        } catch {}
+      }
+      return new Response(JSON.stringify({ ok: true, reloaded: count }), {
+        headers: {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*",
+        },
+      });
     }
 
     // CORS preflight
@@ -216,8 +235,9 @@ const server = Bun.serve<ExtensionWsData>({
     });
   },
   websocket: {
-    open(_ws) {
-      console.log(`[WebSocket] Một Chrome Extension vừa kết nối.`);
+    idleTimeout: 0,
+    open(ws) {
+      handleExtensionWsOpen(ws);
     },
     message(ws, message) {
       handleExtensionWsMessage(ws, message, sqlite);

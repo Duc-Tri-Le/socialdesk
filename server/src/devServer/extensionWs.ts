@@ -10,12 +10,20 @@ export const pendingExtensionTasks = new Map<
   string,
   { resolve: (val: any) => void; reject: (err: any) => void; timer: any }
 >();
+export const allSockets = new Set<any>();
 
 export function registerGlobalExtensionHelpers() {
   (globalThis as any).__socialDeskGetOnlineExtensionCodes = () =>
     Array.from(extensionSockets.keys());
   (globalThis as any).__socialDeskIsExtensionOnline = (code: string) =>
     !!code && extensionSockets.has(code.trim().toUpperCase());
+  (globalThis as any).__socialDeskPingExtensions = () => {
+    for (const ws of allSockets) {
+      try {
+        ws.send(JSON.stringify({ type: "REQUEST_REGISTRATION" }));
+      } catch {}
+    }
+  };
   (globalThis as any).__socialDeskSendExtensionTask = async (
     code: string,
     task: any,
@@ -52,6 +60,16 @@ export function registerGlobalExtensionHelpers() {
   };
 }
 
+export function handleExtensionWsOpen(ws: any) {
+  allSockets.add(ws);
+  console.log(`[WebSocket] Một Chrome Extension vừa kết nối.`);
+  try {
+    ws.send(JSON.stringify({ type: "REQUEST_REGISTRATION" }));
+  } catch (err) {
+    console.error(`[WebSocket] Lỗi gửi REQUEST_REGISTRATION:`, err);
+  }
+}
+
 export function handleExtensionWsMessage(
   ws: any,
   message: string | Buffer,
@@ -64,60 +82,96 @@ export function handleExtensionWsMessage(
     if (data.type === "REGISTER_EXTENSION") {
       const code = (data.code || "").trim().toUpperCase();
       if (code) {
+        ws.data = ws.data || {};
         ws.data.code = code;
         extensionSockets.set(code, ws);
         console.log(`[WebSocket] ✓ Đã ghi nhận Chrome Extension mã: [${code}]`);
 
-        const fbName = (data.fbName || "").trim();
+        const rawName = (data.fbName || "").trim();
+        const isGarbage =
+          rawName.includes("\n") ||
+          rawName.length < 2 ||
+          rawName.length > 50 ||
+          /chưa đọc|tin nhắn|thông báo|messenger|bảng tin|facebook|công cụ|kế hoạch|planner|quản trị|quản lý|trung tâm|quảng cáo|cài đặt|kỷ niệm|đã lưu|bảng feed|chợ|marketplace|meta|business|suite/i.test(
+            rawName,
+          );
+        const fbName = isGarbage ? "" : rawName;
         const fbUrl = (data.fbUrl || "").trim();
 
-        // Tự động đồng bộ tài khoản Facebook lấy tên nick từ Facebook
+        // Tự động đồng bộ tài khoản Facebook
         try {
           const rows = sqlite
-            .query("SELECT * FROM accounts WHERE extension_code = ?")
+            .query("SELECT * FROM accounts WHERE platform = 'Facebook' AND extension_code = ?")
             .all(code) as any[];
           if (rows.length === 0) {
-            const autoName = fbName || `Nick Facebook ${code}`;
-            const initialUrl =
-              fbUrl && !/^https?:\/\/(www\.)?facebook\.com\/?$/i.test(fbUrl)
-                ? fbUrl
-                : "";
-            sqlite.run(
-              "INSERT INTO accounts (platform, name, handle, profile_url, extension_code, linked, selected, created_at) VALUES (?, ?, ?, ?, ?, 1, 1, ?)",
-              [
-                "Facebook",
-                autoName,
-                "Tài khoản Chrome Extension",
-                initialUrl,
-                code,
-                Date.now(),
-              ],
-            );
-            console.log(
-              `[WebSocket] ✓ Tự động tạo tài khoản Facebook: "${autoName}" từ Chrome [${code}]`,
-            );
-          } else if (fbName && rows[0].name !== fbName) {
-            const hasCustomUrl =
-              rows[0].profile_url &&
-              !/^https?:\/\/(www\.)?facebook\.com\/?$/i.test(
-                rows[0].profile_url,
-              );
-            const isValidFbUrl =
-              fbUrl && !/^https?:\/\/(www\.)?facebook\.com\/?$/i.test(fbUrl);
-            if (!hasCustomUrl && isValidFbUrl) {
+            // Tìm tài khoản Facebook đã có để gắn mã thay vì tạo tài khoản rác
+            let existingAccount: any = null;
+            if (fbUrl && !/^https?:\/\/(www\.)?facebook\.com\/?$/i.test(fbUrl)) {
+              const byUrl = sqlite
+                .query("SELECT * FROM accounts WHERE profile_url = ?")
+                .all(fbUrl) as any[];
+              if (byUrl.length > 0) existingAccount = byUrl[0];
+            }
+            if (!existingAccount && fbName) {
+              const byName = sqlite
+                .query("SELECT * FROM accounts WHERE platform = 'Facebook' AND name = ?")
+                .all(fbName) as any[];
+              if (byName.length > 0) existingAccount = byName[0];
+            }
+            if (!existingAccount) {
+              const fbAccounts = sqlite
+                .query("SELECT * FROM accounts WHERE platform = 'Facebook'")
+                .all() as any[];
+              if (fbAccounts.length === 1) {
+                const single = fbAccounts[0];
+                const oldCode = (single.extension_code || "").trim().toUpperCase();
+                if (!oldCode || !extensionSockets.has(oldCode)) {
+                  existingAccount = single;
+                }
+              }
+            }
+
+            if (existingAccount) {
               sqlite.run(
-                "UPDATE accounts SET name = ?, profile_url = ? WHERE id = ?",
-                [fbName, fbUrl, rows[0].id],
+                "UPDATE accounts SET extension_code = ?, profile_url = CASE WHEN ? != '' AND ? NOT LIKE '%facebook.com/' THEN ? ELSE profile_url END WHERE id = ?",
+                [code, fbUrl, fbUrl, fbUrl, existingAccount.id],
+              );
+              console.log(
+                `[WebSocket] ✓ Tự động gán mã Chrome [${code}] cho tài khoản Facebook "${existingAccount.name}" (id: ${existingAccount.id})`,
               );
             } else {
+              const autoName = fbName || `Nick Facebook ${code}`;
+              const initialUrl =
+                fbUrl && !/^https?:\/\/(www\.)?facebook\.com\/?$/i.test(fbUrl)
+                  ? fbUrl
+                  : "";
+              sqlite.run(
+                "INSERT INTO accounts (platform, name, handle, profile_url, extension_code, linked, selected, created_at) VALUES (?, ?, ?, ?, ?, 1, 1, ?)",
+                [
+                  "Facebook",
+                  autoName,
+                  "Tài khoản Chrome Extension",
+                  initialUrl,
+                  code,
+                  Date.now(),
+                ],
+              );
+              console.log(
+                `[WebSocket] ✓ Tự động tạo tài khoản Facebook: "${autoName}" từ Chrome [${code}]`,
+              );
+            }
+          } else if (fbName && rows[0].name !== fbName) {
+            const isGenericPlaceholder =
+              /^Nick Facebook(\s*\(?[A-Z0-9-]+\)?)?$/i.test(rows[0].name.trim());
+            if (isGenericPlaceholder) {
               sqlite.run(
                 "UPDATE accounts SET name = ? WHERE id = ?",
                 [fbName, rows[0].id],
               );
+              console.log(
+                `[WebSocket] ✓ Gán tên nick Facebook: "${fbName}" cho mã [${code}]`,
+              );
             }
-            console.log(
-              `[WebSocket] ✓ Cập nhật tên nick Facebook thành "${fbName}" cho mã [${code}]`,
-            );
           }
         } catch (dbErr) {
           console.warn("[WebSocket] Lỗi đồng bộ tài khoản:", dbErr);
@@ -142,6 +196,7 @@ export function handleExtensionWsMessage(
 }
 
 export function handleExtensionWsClose(ws: any) {
+  allSockets.delete(ws);
   if (ws.data?.code) {
     extensionSockets.delete(ws.data.code);
     console.log(

@@ -1,4 +1,4 @@
-import { asc, eq } from "drizzle-orm";
+import { asc } from "drizzle-orm";
 import * as schema from "../../schema";
 import type { Db } from "../settings";
 import { parseDriveImages } from "../drive";
@@ -25,6 +25,7 @@ export function parsePackTargets(raw: string): PackTargets {
     group_ids: [],
     page_ids: [],
     instagram_account_ids: [],
+    account_ids: [],
   };
   if (!raw.trim()) return empty;
   try {
@@ -32,6 +33,7 @@ export function parsePackTargets(raw: string): PackTargets {
       group_ids?: unknown;
       page_ids?: unknown;
       instagram_account_ids?: unknown;
+      account_ids?: unknown;
     };
     const ids = (v: unknown): number[] =>
       Array.isArray(v)
@@ -45,6 +47,7 @@ export function parsePackTargets(raw: string): PackTargets {
       group_ids: ids(parsed.group_ids),
       page_ids: ids(parsed.page_ids),
       instagram_account_ids: ids(parsed.instagram_account_ids),
+      account_ids: ids(parsed.account_ids),
     };
   } catch {
     return empty;
@@ -55,11 +58,13 @@ export function serializePackTargets(t: {
   group_ids: number[];
   page_ids: number[];
   instagram_account_ids: number[];
+  account_ids?: number[];
 }): string {
   return JSON.stringify({
     group_ids: t.group_ids,
     page_ids: t.page_ids,
     instagram_account_ids: t.instagram_account_ids,
+    account_ids: t.account_ids || [],
   });
 }
 
@@ -68,7 +73,7 @@ export async function buildPackTextForDraft(
   db: Db,
   row: DraftRow,
   args: PackTargetsInput,
-  opts?: { explicit?: boolean },
+  _opts?: { explicit?: boolean },
 ): Promise<BuildPackResult> {
   const cleanCaption = hasColorPlaceholder(row.caption)
     ? stripColorPlaceholders(row.caption, row.color)
@@ -111,18 +116,13 @@ export async function buildPackTextForDraft(
         notJoined.map((g) => g.name).join(", "),
     };
   const media = await db.select().from(schema.mediaItems);
-  const selectedAccounts = await db
-    .select()
-    .from(schema.accounts)
-    .where(eq(schema.accounts.selected, 1));
-  const postingAccounts = selectedAccounts.filter((a) => a.linked === 1);
   const allAccounts = await db.select().from(schema.accounts);
   const accountById = new Map(allAccounts.map((a) => [a.id, a]));
-  const selectedPages = await db
-    .select()
-    .from(schema.fbPages)
-    .where(eq(schema.fbPages.selected, 1));
-  const postingPages = selectedPages;
+  const accountIds = args.account_ids ?? [];
+  const chosenFbAccounts = allAccounts.filter(
+    (a) => a.platform === "Facebook" && accountIds.includes(a.id),
+  );
+  const allPages = await db.select().from(schema.fbPages);
   const now = new Date();
   const dateFmt = new Intl.DateTimeFormat("vi-VN", {
     timeZone: "Asia/Ho_Chi_Minh",
@@ -133,20 +133,11 @@ export async function buildPackTextForDraft(
     minute: "2-digit",
     hour12: false,
   });
-  const allPages = await db.select().from(schema.fbPages);
-  const chosenPages = opts?.explicit
-    ? allPages.filter((p) => pageIds.includes(p.id))
-    : pageIds.length > 0
-      ? allPages.filter((p) => pageIds.includes(p.id))
-      : postingPages;
+  const chosenPages = allPages.filter((p) => pageIds.includes(p.id));
   const igAccounts = allAccounts.filter(
     (a) => a.platform === "Instagram" && a.linked === 1,
   );
-  const chosenIgAccounts = opts?.explicit
-    ? igAccounts.filter((a) => igIds.includes(a.id))
-    : igIds.length > 0
-      ? igAccounts.filter((a) => igIds.includes(a.id))
-      : igAccounts.filter((a) => a.selected === 1);
+  const chosenIgAccounts = igAccounts.filter((a) => igIds.includes(a.id));
   const targetLines =
     chosen.length > 0
       ? chosen
@@ -199,10 +190,10 @@ export async function buildPackTextForDraft(
           : packError
             ? `- Chưa gắn ảnh/video nào (${packError}).`
             : "- Chưa gắn ảnh/video nào.";
-  const accountLines =
-    postingAccounts.length > 0
-      ? postingAccounts
-          .map((a) => `- ${a.platform}: ${a.name}${a.handle ? ` (${a.handle})` : ""}`)
+  const fbAccountLines =
+    chosenFbAccounts.length > 0
+      ? chosenFbAccounts
+          .map((a) => `- Nick Facebook: ${a.name}${a.handle ? ` (${a.handle})` : ""}`)
           .join("\n")
       : "";
   const pageLines =
@@ -224,7 +215,7 @@ export async function buildPackTextForDraft(
           .join("\n")
       : "";
   const hasDestination =
-    postingAccounts.length > 0 ||
+    chosenFbAccounts.length > 0 ||
     chosen.length > 0 ||
     chosenPages.length > 0 ||
     chosenIgAccounts.length > 0;
@@ -233,10 +224,10 @@ export async function buildPackTextForDraft(
     `Sản phẩm: ${row.productName}${row.sku ? ` | SKU: ${row.sku}` : row.stt ? ` | STT: ${row.stt}` : ""} | Tỉ lệ: ${row.scale} | Màu: ${row.color || "—"} | Xuất gói: ${dateFmt.format(now)} (giờ VN)`,
     "",
     "## Đích đăng",
-    ...(postingAccounts.length > 0 ? ["Tài khoản đăng:", accountLines] : []),
     ...(chosen.length > 0 ? ["Nhóm:", targetLines] : []),
     ...(chosenPages.length > 0 ? ["Fanpage:", pageLines] : []),
     ...(chosenIgAccounts.length > 0 ? ["Instagram:", igLines] : []),
+    ...(chosenFbAccounts.length > 0 ? ["Nick Facebook cá nhân:", fbAccountLines] : []),
     ...(!hasDestination ? ["- Chưa chọn đích đăng nào."] : []),
     "",
     "## Media của bài",

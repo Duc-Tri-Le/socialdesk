@@ -60,12 +60,14 @@ export function useQueueMutations({
       group_ids?: number[];
       page_ids?: number[];
       instagram_account_ids?: number[];
+      account_ids?: number[];
     }) =>
       api.buildPack({
         id: args.id,
         group_ids: args.group_ids ?? [],
         page_ids: args.page_ids ?? [],
         instagram_account_ids: args.instagram_account_ids ?? [],
+        account_ids: args.account_ids ?? [],
       }),
     onSuccess: (res, args) => {
       setFeedback((f) => ({ ...f, [args.id]: { ok: res.ok, text: res.message } }));
@@ -90,12 +92,14 @@ export function useQueueMutations({
       group_ids?: number[];
       page_ids?: number[];
       instagram_account_ids?: number[];
+      account_ids?: number[];
     }) =>
       api.saveDraftTargets({
         id: args.id,
         group_ids: args.group_ids ?? [],
         page_ids: args.page_ids ?? [],
         instagram_account_ids: args.instagram_account_ids ?? [],
+        account_ids: args.account_ids ?? [],
       }),
     onSuccess: (res, args) => {
       if (!res.ok) {
@@ -122,7 +126,8 @@ export function useQueueMutations({
       group_ids: number[];
       page_ids: number[];
       instagram_account_ids: number[];
-    }) => api.publishDraft(args),
+      account_ids?: number[];
+    }) => api.publishDraft({ ...args, account_ids: args.account_ids ?? [] }),
     onSuccess: (res, args) => {
       setFeedback((f) => ({ ...f, [args.id]: { ok: res.ok, text: res.message } }));
       if (res.ok && res.results.some((r) => r.status === "published")) {
@@ -155,6 +160,7 @@ export function useQueueMutations({
       group_ids?: number[];
       page_ids?: number[];
       instagram_account_ids?: number[];
+      account_ids?: number[];
     }) =>
       api.scheduleDraft({
         id: args.id,
@@ -162,6 +168,7 @@ export function useQueueMutations({
         group_ids: args.group_ids ?? [],
         page_ids: args.page_ids ?? [],
         instagram_account_ids: args.instagram_account_ids ?? [],
+        account_ids: args.account_ids ?? [],
       }),
     onSuccess: (res, args) => {
       setFeedback((f) => ({ ...f, [args.id]: { ok: res.ok, text: res.message } }));

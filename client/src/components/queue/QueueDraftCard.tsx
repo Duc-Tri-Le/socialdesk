@@ -36,6 +36,7 @@ export interface QueueDraftCardProps {
     group_ids: number[];
     page_ids: number[];
     instagram_account_ids: number[];
+    account_ids?: number[];
   }) => void;
   isPackPending: boolean;
   onPublish: (args: {
@@ -43,6 +44,7 @@ export interface QueueDraftCardProps {
     group_ids: number[];
     page_ids: number[];
     instagram_account_ids: number[];
+    account_ids?: number[];
   }) => void;
   isPublishPending: boolean;
   onSchedule?: (args: {
@@ -51,6 +53,7 @@ export interface QueueDraftCardProps {
     group_ids?: number[];
     page_ids?: number[];
     instagram_account_ids?: number[];
+    account_ids?: number[];
   }) => void;
   isSchedulePending?: boolean;
   onCancelSchedule?: (id: number) => void;
@@ -62,6 +65,7 @@ export interface QueueDraftCardProps {
     group_ids: number[];
     page_ids: number[];
     instagram_account_ids: number[];
+    account_ids: number[];
   }) => void;
 }
 
@@ -106,6 +110,7 @@ export function QueueDraftCard({
     selectedGroups,
     selectedPages,
     selectedIg,
+    selectedAccounts,
     targetSummaryText,
     applyTargets,
   } = useDraftTargets({
@@ -113,6 +118,7 @@ export function QueueDraftCard({
     joinedGroups,
     allPages,
     igAccounts,
+    mainAccounts,
     onSaveTargets,
   });
 
@@ -206,6 +212,7 @@ export function QueueDraftCard({
                   group_ids: selectedGroups,
                   page_ids: selectedPages,
                   instagram_account_ids: selectedIg,
+                  account_ids: selectedAccounts,
                 })
               }
               isPackPending={isPackPending}
@@ -225,6 +232,7 @@ export function QueueDraftCard({
               selectedGroupIds={selectedGroups}
               selectedPageIds={selectedPages}
               selectedIgIds={selectedIg}
+              selectedAccountIds={selectedAccounts}
               onApplyTargets={applyTargets}
               joinedGroups={joinedGroups}
               allPages={allPages}
@@ -279,6 +287,7 @@ export function QueueDraftCard({
             group_ids: selectedGroups,
             page_ids: selectedPages,
             instagram_account_ids: selectedIg,
+            account_ids: selectedAccounts,
           })
         }
         onGoMedia={onGoMedia}
@@ -292,9 +301,11 @@ export function QueueDraftCard({
           selectedPageIds={selectedPages}
           selectedIgIds={selectedIg}
           selectedGroupIds={selectedGroups}
+          selectedAccountIds={selectedAccounts}
           allPages={allPages}
           igAccounts={igAccounts}
           joinedGroups={joinedGroups}
+          mainAccounts={mainAccounts}
           isPublishPending={isPublishPending}
           onConfirmPublish={() => {
             onPublish({
@@ -302,6 +313,7 @@ export function QueueDraftCard({
               group_ids: selectedGroups,
               page_ids: selectedPages,
               instagram_account_ids: selectedIg,
+              account_ids: selectedAccounts,
             });
             setPublishConfirm(false);
           }}
@@ -316,9 +328,11 @@ export function QueueDraftCard({
           selectedPageIds={selectedPages}
           selectedIgIds={selectedIg}
           selectedGroupIds={selectedGroups}
+          selectedAccountIds={selectedAccounts}
           allPages={allPages}
           igAccounts={igAccounts}
           joinedGroups={joinedGroups}
+          mainAccounts={mainAccounts}
           isSchedulePending={!!isSchedulePending}
           onConfirmSchedule={(scheduledAt) => {
             onSchedule({
@@ -327,6 +341,7 @@ export function QueueDraftCard({
               group_ids: selectedGroups,
               page_ids: selectedPages,
               instagram_account_ids: selectedIg,
+              account_ids: selectedAccounts,
             });
             setScheduleOpen(false);
           }}

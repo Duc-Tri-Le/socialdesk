@@ -28,6 +28,7 @@ import {
 } from "./instagramPublisher";
 import {
   prepareGroupQueue,
+  prepareAccountQueue,
   dispatchBrowserQueue,
 } from "./groupPublisher";
 
@@ -79,15 +80,17 @@ export async function executePublishDraft(
     };
   }
 
+  const accountIds = args.account_ids ?? [];
   if (
     args.page_ids.length === 0 &&
     args.instagram_account_ids.length === 0 &&
-    args.group_ids.length === 0
+    args.group_ids.length === 0 &&
+    accountIds.length === 0
   ) {
     return {
       ok: false,
       message:
-        "Chưa chọn đích đăng nào — mở “Chọn đích đăng” và chọn ít nhất một fanpage, tài khoản Instagram hoặc nhóm đích.",
+        "Chưa chọn đích đăng nào — mở “Chọn đích đăng” và chọn ít nhất một fanpage, tài khoản Instagram, nhóm đích hoặc tài khoản chính.",
       results,
     };
   }
@@ -99,6 +102,7 @@ export async function executePublishDraft(
         group_ids: args.group_ids,
         page_ids: args.page_ids,
         instagram_account_ids: args.instagram_account_ids,
+        account_ids: accountIds,
       }),
     })
     .where(eq(schema.drafts.id, args.id));
@@ -186,6 +190,8 @@ export async function executePublishDraft(
 
   const helpers = { alreadyPublished, alreadyQueued, alreadyUncertain, record };
 
+  const browserQueue: BrowserQueueItem[] = [];
+
   // 1. Fanpages
   const pageBrowserQueue = await publishToPages(
     ctx,
@@ -196,8 +202,9 @@ export async function executePublishDraft(
     mediaNote,
     helpers,
   );
+  browserQueue.push(...pageBrowserQueue);
 
-  // 2. Instagram Queue
+  // 2. Instagram Queue (hỗ trợ đẩy vào browserQueue nếu không có Hatch CLI / localFiles)
   const igQueue = await prepareInstagramQueue(
     ctx,
     db,
@@ -207,6 +214,7 @@ export async function executePublishDraft(
     driveImages.length,
     mediaNote,
     helpers,
+    browserQueue,
   );
 
   // 3. Groups Queue
@@ -215,13 +223,17 @@ export async function executePublishDraft(
     args.group_ids,
     helpers,
   );
+  browserQueue.push(...groupBrowserQueue);
 
-  const browserQueue: BrowserQueueItem[] = [
-    ...pageBrowserQueue,
-    ...groupBrowserQueue,
-  ];
+  // 4. Personal Facebook Account Queue
+  const accountBrowserQueue = await prepareAccountQueue(
+    db,
+    accountIds,
+    helpers,
+  );
+  browserQueue.push(...accountBrowserQueue);
 
-  // 4. Kích hoạt Browser Queue
+  // 5. Kích hoạt Browser Queue trên Chrome Extension
   await dispatchBrowserQueue(
     db,
     row,
@@ -231,7 +243,7 @@ export async function executePublishDraft(
     results,
   );
 
-  // 5. Kích hoạt Instagram Queue
+  // 6. Kích hoạt Instagram Queue (qua CLI nền nếu có)
   await dispatchInstagramQueue(ctx, db, row, caption, igQueue, results);
 
   const publishedCount = results.filter((r) => r.status === "published").length;

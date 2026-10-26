@@ -2,7 +2,7 @@
 // Điều phối tác vụ đăng bài Facebook và quét chỉ số tương tác
 
 // Đảm bảo Content Script đã sẵn sàng trong Tab trước khi gửi lệnh
-async function ensureContentScriptReady(tabId, maxRetries = 4) {
+async function ensureContentScriptReady(tabId, maxRetries = 4, isIg = false) {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     const isAlive = await new Promise((resolve) => {
       chrome.tabs.sendMessage(tabId, { action: "PING" }, (res) => {
@@ -18,9 +18,12 @@ async function ensureContentScriptReady(tabId, maxRetries = 4) {
 
     // Nếu chưa phản hồi, chủ động nạp script vào tab
     try {
+      const scriptFiles = isIg
+        ? ["instagram_content.js"]
+        : ["content_utils.js", "content.js"];
       await chrome.scripting.executeScript({
         target: { tabId },
-        files: ["content_utils.js", "content.js"],
+        files: scriptFiles,
       });
     } catch (e) {
       console.warn(`[Social Desk] Lần ${attempt} nạp script:`, e.message);
@@ -44,12 +47,16 @@ async function handlePublishTask(task) {
   }
   runningTaskIds.add(taskId);
 
-  // 2. Xác thực URL đích an toàn (phải thuộc tên miền facebook.com)
-  const safeTargetUrl = (targetUrl || "https://www.facebook.com/").trim();
+  // 2. Xác thực URL đích an toàn (phải thuộc tên miền facebook.com hoặc instagram.com)
+  const safeTargetUrl = (targetUrl || (task.targetKind === "instagram" ? "https://www.instagram.com/" : "https://www.facebook.com/")).trim();
+  let isFb = false;
+  let isIg = false;
   try {
     const parsed = new URL(safeTargetUrl);
-    if (!parsed.hostname.endsWith("facebook.com")) {
-      throw new Error(`Tên miền không hợp lệ: ${parsed.hostname}. Chỉ chấp nhận facebook.com.`);
+    isFb = parsed.hostname.endsWith("facebook.com");
+    isIg = parsed.hostname.endsWith("instagram.com");
+    if (!isFb && !isIg) {
+      throw new Error(`Tên miền không hợp lệ: ${parsed.hostname}. Chỉ chấp nhận facebook.com hoặc instagram.com.`);
     }
   } catch (urlErr) {
     markTaskProcessed(taskId);
@@ -64,12 +71,13 @@ async function handlePublishTask(task) {
     return;
   }
 
-  addLog(`Bắt đầu xử lý đăng bài: "${targetName || 'Facebook'}"...`, "info");
+  const platformLabel = isIg ? "Instagram" : "Facebook";
+  addLog(`Bắt đầu xử lý đăng bài: "${targetName || platformLabel}"...`, "info");
 
   let createdTabId = null;
 
   try {
-    // 3. Mở tab Facebook đích
+    // 3. Mở tab đích
     const tab = await chrome.tabs.create({
       url: safeTargetUrl,
       active: true,
@@ -78,40 +86,67 @@ async function handlePublishTask(task) {
 
     // 4. Chờ tab hoàn tất tải DOM
     await waitForTabComplete(tab.id, 30000);
-    addLog("Trang Facebook đã tải xong, đang kiểm tra giao diện...", "");
+    addLog(`Trang ${platformLabel} đã tải xong, đang kiểm tra giao diện...`, "");
 
-    // Đợi 2.5s để React / Lexical editor khởi tạo
+    // Đợi 2.5s để React / editor khởi tạo
     await new Promise((r) => setTimeout(r, 2500));
 
     // 5. Kiểm tra & Bắt tay với Content Script
-    const scriptReady = await ensureContentScriptReady(tab.id);
+    const scriptReady = await ensureContentScriptReady(tab.id, 4, isIg);
     if (!scriptReady) {
-      throw new Error("Không thể kết nối với script điều khiển trên trang Facebook. Vui lòng kiểm tra quyền truy cập tab.");
+      throw new Error(`Không thể kết nối với script điều khiển trên trang ${platformLabel}. Vui lòng kiểm tra quyền truy cập tab.`);
     }
 
-    // 6. Gửi lệnh đăng bài kèm thời gian chờ tối đa (90s)
-    const postPromise = new Promise((resolve, reject) => {
-      chrome.tabs.sendMessage(
-        tab.id,
-        {
-          action: "DO_POST",
-          payload: { caption, images, targetUrl: safeTargetUrl, taskId },
-        },
-        (res) => {
-          if (chrome.runtime.lastError) {
-            reject(new Error(chrome.runtime.lastError.message || "Mất liên lạc với trang Facebook"));
-          } else {
-            resolve(res || { success: false, message: "Không nhận được phản hồi kết quả từ Facebook" });
+    // 6. Gửi lệnh đăng bài kèm thời gian chờ tối đa (90s), tự động bắt tay lại nếu trang điều hướng
+    async function executePostWithRetry(targetTabId) {
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          const res = await new Promise((resolve, reject) => {
+            chrome.tabs.sendMessage(
+              targetTabId,
+              {
+                action: "DO_POST",
+                payload: {
+                  caption,
+                  images,
+                  targetUrl: safeTargetUrl,
+                  targetKind: task.targetKind || (isIg ? "instagram" : "page"),
+                  targetName: task.targetName || "",
+                  taskId,
+                },
+              },
+              (r) => {
+                if (chrome.runtime.lastError) {
+                  reject(new Error(chrome.runtime.lastError.message || `Mất liên lạc với trang ${platformLabel}`));
+                } else {
+                  resolve(r || { success: false, message: `Không nhận được phản hồi kết quả từ ${platformLabel}` });
+                }
+              }
+            );
+          });
+          return res;
+        } catch (err) {
+          const isChannelClosed = err.message && (
+            err.message.includes("message channel closed") ||
+            err.message.includes("Could not establish connection")
+          );
+          if (isChannelClosed && attempt < 2) {
+            addLog(`Trang ${platformLabel} chuyển trang hoặc tải lại, đang kết nối lại...`, "info");
+            await waitForTabComplete(targetTabId, 15000);
+            await new Promise((r) => setTimeout(r, 2000));
+            const ready = await ensureContentScriptReady(targetTabId, 4, isIg);
+            if (ready) continue;
           }
+          throw err;
         }
-      );
-    });
+      }
+    }
 
     const timeoutPromise = new Promise((_, reject) => {
       setTimeout(() => reject(new Error("Quá thời gian xử lý đăng bài (90 giây).")), 90000);
     });
 
-    const response = await Promise.race([postPromise, timeoutPromise]);
+    const response = await Promise.race([executePostWithRetry(tab.id), timeoutPromise]);
 
     markTaskProcessed(taskId);
 
@@ -229,6 +264,14 @@ function sendTaskResult(data) {
 function waitForTabComplete(tabId, timeoutMs = 25000) {
   return new Promise((resolve) => {
     let resolved = false;
+
+    chrome.tabs.get(tabId, (tab) => {
+      if (!chrome.runtime.lastError && tab && tab.status === "complete") {
+        cleanup();
+        resolve();
+      }
+    });
+
     function listener(id, info) {
       if (id === tabId && info.status === "complete") {
         cleanup();

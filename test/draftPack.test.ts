@@ -99,5 +99,58 @@ describe("Draft Pack Builder & Targets", () => {
     expect(result.ok).toBe(true);
     expect(result.packText).toContain("CHỢ MÔ HÌNH - Figure Market");
     expect(result.packText).toContain("Page “Duc Homnayxemgi”");
+    const destSection = result.packText.split("## Media của bài")[0];
+    expect(destSection).not.toContain("Instagram");
+    expect(destSection).not.toContain("Tài khoản đăng:");
+  });
+
+  it("buildPackTextForDraft chỉ xuất đúng fanpage khi người dùng chỉ chọn fanpage (không tự chèn Instagram)", async () => {
+    const sqlite = new Database("social-desk-database.db");
+    const db = drizzle(sqlite, { schema });
+    const [row] = await db
+      .select()
+      .from(schema.drafts)
+      .where(eq(schema.drafts.id, 29));
+
+    if (!row) return;
+
+    // Chỉ chọn fanpage 3, không chọn nhóm, không chọn Instagram
+    const result = await buildPackTextForDraft(
+      db,
+      row,
+      { group_ids: [], page_ids: [3], instagram_account_ids: [] },
+      { explicit: true },
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.packText).toContain("Fanpage:\n- Page “Duc Homnayxemgi”");
+    const destSection = result.packText.split("## Media của bài")[0];
+    expect(destSection).not.toContain("Instagram");
+    expect(destSection).not.toContain("Tài khoản đăng:");
+    expect(destSection).not.toContain("Nhóm:");
+  });
+
+  it("buildPackTextForDraft xuất đúng Instagram khi được chọn trong đích", async () => {
+    const sqlite = new Database("social-desk-database.db");
+    const db = drizzle(sqlite, { schema });
+    const [row] = await db
+      .select()
+      .from(schema.drafts)
+      .where(eq(schema.drafts.id, 29));
+
+    if (!row) return;
+
+    // Chọn cả fanpage 3 và Instagram 3
+    const result = await buildPackTextForDraft(
+      db,
+      row,
+      { group_ids: [], page_ids: [3], instagram_account_ids: [3] },
+      { explicit: true },
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.packText).toContain("Fanpage:\n- Page “Duc Homnayxemgi”");
+    expect(result.packText).toContain("Instagram:\n- Instagram DucGarage");
+    expect(result.packText).not.toContain("Tài khoản đăng:");
   });
 });

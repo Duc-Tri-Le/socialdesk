@@ -1,6 +1,6 @@
-import { useState, type ReactNode } from "react";
+import { useState, useEffect, useRef, type ReactNode } from "react";
 import type { Account, Page } from "../../types";
-import { ConfirmModal } from "../ui";
+import { ConfirmModal, Pagination, usePagination } from "../ui";
 import { AccountTableRow } from "./AccountTableRow";
 
 export interface AccountTableViewProps {
@@ -45,6 +45,15 @@ export function AccountTableView({
   onRetryConnection,
   onMsg,
 }: AccountTableViewProps) {
+  const pagination = usePagination(accounts, { pageSize: 10 });
+  const prevAccountsRef = useRef(accounts);
+  useEffect(() => {
+    if (prevAccountsRef.current !== accounts) {
+      pagination.resetPage();
+      prevAccountsRef.current = accounts;
+    }
+  }, [accounts]);
+
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
 
   const [confirmState, setConfirmState] = useState<{
@@ -104,8 +113,9 @@ export function AccountTableView({
   };
 
   return (
-    <div className="overflow-x-auto rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] shadow-sm">
-      <table className="w-full text-left border-collapse text-xs">
+    <div className="space-y-3">
+      <div className="overflow-x-auto rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] shadow-sm">
+        <table className="w-full text-left border-collapse text-xs">
         <thead>
           <tr className="border-b border-[var(--border)] bg-[var(--surface-alt)] font-semibold text-[var(--dim)]">
             <th className="py-3 px-3 w-14 text-center">Đang dùng</th>
@@ -118,7 +128,7 @@ export function AccountTableView({
           </tr>
         </thead>
         <tbody className="divide-y divide-[var(--border)]">
-          {accounts.map((a) => (
+          {pagination.pagedItems.map((a) => (
             <AccountTableRow
               key={a.id}
               account={a}
@@ -141,6 +151,17 @@ export function AccountTableView({
           ))}
         </tbody>
       </table>
+    </div>
+
+      {accounts.length > 0 && (
+        <Pagination
+          {...pagination.paginationProps}
+          itemLabel="tài khoản"
+          navLabel="Phân trang bảng tài khoản"
+          prevLabel="Trang trước"
+          nextLabel="Trang sau"
+        />
+      )}
 
       {confirmState && (
         <ConfirmModal

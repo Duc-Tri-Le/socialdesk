@@ -15,6 +15,7 @@ export const draftPublishActions = {
       group_ids: z.array(z.number().int().positive()).default([]),
       page_ids: z.array(z.number().int().positive()).default([]),
       instagram_account_ids: z.array(z.number().int().positive()).default([]),
+      account_ids: z.array(z.number().int().positive()).default([]),
     }),
     response: z.object({
       ok: z.boolean(),
@@ -82,7 +83,9 @@ export const draftPublishActions = {
       outcomes: z
         .array(
           z.object({
-            kind: z.enum(["group", "page"]),
+            kind: z
+              .enum(["group", "page", "account", "instagram"])
+              .default("group"),
             name: z.string().min(1),
             status: z.enum(["published", "failed", "needs_login"]),
             post_url: z.string().default(""),
@@ -171,6 +174,7 @@ export const draftPublishActions = {
       group_ids: z.array(z.number().int().positive()).optional().default([]),
       page_ids: z.array(z.number().int().positive()).optional().default([]),
       instagram_account_ids: z.array(z.number().int().positive()).optional().default([]),
+      account_ids: z.array(z.number().int().positive()).optional().default([]),
     }),
     response: z.object({
       ok: z.boolean(),
@@ -210,8 +214,9 @@ export const draftPublishActions = {
       const groupIds = args.group_ids || [];
       const pageIds = args.page_ids || [];
       const igIds = args.instagram_account_ids || [];
+      const accountIds = args.account_ids || [];
 
-      if (groupIds.length > 0 || pageIds.length > 0 || igIds.length > 0) {
+      if (groupIds.length > 0 || pageIds.length > 0 || igIds.length > 0 || accountIds.length > 0) {
         await db
           .update(schema.drafts)
           .set({
@@ -219,6 +224,7 @@ export const draftPublishActions = {
               group_ids: groupIds,
               page_ids: pageIds,
               instagram_account_ids: igIds,
+              account_ids: accountIds,
             }),
             scheduledAt: scheduledDate,
           })

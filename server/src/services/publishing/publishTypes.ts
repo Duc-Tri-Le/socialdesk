@@ -17,6 +17,7 @@ export type PublishDraftArgs = {
   group_ids: number[];
   page_ids: number[];
   instagram_account_ids: number[];
+  account_ids?: number[];
 };
 
 export type PublishDraftResponse = {
@@ -27,7 +28,7 @@ export type PublishDraftResponse = {
 
 export type BrowserQueueItem = {
   recordId: number;
-  kind: "group" | "page";
+  kind: "group" | "page" | "account" | "instagram";
   name: string;
   url: string;
   via: string[];

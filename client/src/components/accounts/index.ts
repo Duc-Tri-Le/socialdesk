@@ -8,6 +8,8 @@ export { AccountAddForm } from "./AccountAddForm";
 export type { AccountAddFormProps } from "./AccountAddForm";
 export { ExtensionStatusCard } from "./ExtensionStatusCard";
 export type { ExtensionStatusCardProps } from "./ExtensionStatusCard";
+export { AccountTableExtensionCell } from "./AccountTableExtensionCell";
+export type { AccountTableExtensionCellProps } from "./AccountTableExtensionCell";
 export * from "./accountTypes";
 export * from "./utils/accountFilters";
 export * from "./hooks/usePlatformAccountManager";

@@ -9,7 +9,8 @@ export interface TargetPickerProps {
   selectedGroupIds: number[];
   selectedPageIds: number[];
   selectedIgIds: number[];
-  onApplyTargets: (groupIds: number[], pageIds: number[], igIds: number[]) => void;
+  selectedAccountIds?: number[];
+  onApplyTargets: (groupIds: number[], pageIds: number[], igIds: number[], accountIds?: number[]) => void;
   joinedGroups: Group[];
   allPages: Page[];
   igAccounts: Account[];
@@ -28,18 +29,16 @@ export function TargetPicker({
   selectedGroupIds: selected,
   selectedPageIds,
   selectedIgIds,
+  selectedAccountIds = [],
   onApplyTargets,
   joinedGroups,
   allPages,
   igAccounts,
   mainAccounts,
-  selectedMainCount,
-  onToggleMainAccount,
-  isMainAccountPending,
   onGoGroups,
 }: TargetPickerProps) {
   const totalPicked =
-    selected.length + selectedPageIds.length + selectedIgIds.length + selectedMainCount;
+    selected.length + selectedPageIds.length + selectedIgIds.length + selectedAccountIds.length;
   const allGroupsPicked =
     joinedGroups.length > 0 && selected.length === joinedGroups.length;
 
@@ -49,12 +48,12 @@ export function TargetPicker({
         type="button"
         className={`${btnGhost} flex w-full flex-wrap items-center justify-between gap-2 text-left`}
         aria-expanded={isOpen}
-        aria-label={`Chọn đích đăng cho ${d.product_name} — đã chọn ${selected.length} nhóm đích, ${selectedPageIds.length} fanpage, ${selectedIgIds.length} tài khoản Instagram, ${selectedMainCount} tài khoản chính thức`}
+        aria-label={`Chọn đích đăng cho ${d.product_name} — đã chọn ${selected.length} nhóm đích, ${selectedPageIds.length} fanpage, ${selectedIgIds.length} tài khoản Instagram, ${selectedAccountIds.length} tài khoản cá nhân`}
         onClick={onToggleOpen}
       >
         <span className="font-semibold">Chọn đích đăng</span>
         <span className="text-xs font-medium text-[var(--dim)]">
-          Đã chọn: {selected.length} nhóm đích · {selectedPageIds.length} fanpage · {selectedIgIds.length} tài khoản Instagram · {selectedMainCount} tài khoản chính thức (tổng {totalPicked} đích) {isOpen ? "▲" : "▼"}
+          Đã chọn: {selected.length} nhóm · {selectedPageIds.length} fanpage · {selectedIgIds.length} Instagram · {selectedAccountIds.length} nick cá nhân (tổng {totalPicked} đích) {isOpen ? "▲" : "▼"}
         </span>
       </button>
 
@@ -93,6 +92,7 @@ export function TargetPicker({
                       joinedGroups.map((g) => g.id),
                       selectedPageIds,
                       selectedIgIds,
+                      selectedAccountIds,
                     )
                   }
                 >
@@ -101,25 +101,21 @@ export function TargetPicker({
               )}
             </div>
             <p className="mt-0.5 text-xs text-[var(--dim)]">
-              Chỉ đăng bằng danh tính đã tham gia nhóm đó — trạng thái của tài khoản chính và từng Page tính riêng.
+              Chỉ đăng vào nhóm bằng danh tính đã tham gia nhóm đó.
             </p>
             {joinedGroups.length === 0 ? (
               <p className="mt-1 text-sm text-[var(--danger)]">
-                Chưa có nhóm nào có tài khoản chính hoặc Page đang chọn đăng được đánh dấu “Đã tham gia”.{" "}
+                Chưa có nhóm nào được đánh dấu “Đã tham gia”.{" "}
                 <button className="underline" onClick={onGoGroups}>
                   Sang mục Hội nhóm để đánh dấu
-                </button>{" "}
-                — hoặc cứ để trống nhóm rồi bổ sung sau, gói đăng tự cập nhật theo.
+                </button>
               </p>
             ) : (
               <div className="mt-2 flex flex-wrap gap-2">
                 {joinedGroups.map((g) => {
                   const on = selected.includes(g.id);
-                  const activeMain =
-                    mainAccounts.find((a) => a.selected) || mainAccounts[0];
-                  const nickLabel = activeMain
-                    ? `Nick ${activeMain.name}`
-                    : "Nick Facebook";
+                  const activeMain = mainAccounts.find((a) => a.selected) || mainAccounts[0];
+                  const nickLabel = activeMain ? `Nick ${activeMain.name}` : "Nick Facebook";
                   const via = [
                     ...(g.account_joined ? [nickLabel] : []),
                     ...g.joined_pages.map((p) => `Page ${p.name}`),
@@ -130,11 +126,10 @@ export function TargetPicker({
                       aria-pressed={on}
                       onClick={() =>
                         onApplyTargets(
-                          on
-                            ? selected.filter((x) => x !== g.id)
-                            : [...selected, g.id],
+                          on ? selected.filter((x) => x !== g.id) : [...selected, g.id],
                           selectedPageIds,
                           selectedIgIds,
+                          selectedAccountIds,
                         )
                       }
                       className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
@@ -158,7 +153,7 @@ export function TargetPicker({
             </p>
             {allPages.length === 0 ? (
               <p className="mt-1 text-sm text-[var(--dim)]">
-                Chưa có Page nào — thêm Page ở mục Tài khoản nếu muốn đăng lên fanpage. Bài vẫn đăng được cho các đích khác.
+                Chưa có Page nào — thêm Page ở mục Tài khoản nếu muốn đăng lên fanpage.
               </p>
             ) : (
               <div className="mt-2 flex flex-wrap gap-2">
@@ -171,10 +166,9 @@ export function TargetPicker({
                       onClick={() =>
                         onApplyTargets(
                           selected,
-                          on
-                            ? selectedPageIds.filter((x) => x !== p.id)
-                            : [...selectedPageIds, p.id],
+                          on ? selectedPageIds.filter((x) => x !== p.id) : [...selectedPageIds, p.id],
                           selectedIgIds,
+                          selectedAccountIds,
                         )
                       }
                       className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
@@ -198,7 +192,7 @@ export function TargetPicker({
             </p>
             {igAccounts.length === 0 ? (
               <p className="mt-1 text-sm text-[var(--dim)]">
-                Chưa có tài khoản Instagram nào đã liên kết — liên kết ở mục Tài khoản nếu muốn đăng lên Instagram. Bài vẫn đăng được cho các đích khác.
+                Chưa có tài khoản Instagram nào đã liên kết — liên kết ở mục Tài khoản.
               </p>
             ) : (
               <div className="mt-2 flex flex-wrap gap-2">
@@ -212,9 +206,8 @@ export function TargetPicker({
                         onApplyTargets(
                           selected,
                           selectedPageIds,
-                          on
-                            ? selectedIgIds.filter((x) => x !== a.id)
-                            : [...selectedIgIds, a.id],
+                          on ? selectedIgIds.filter((x) => x !== a.id) : [...selectedIgIds, a.id],
+                          selectedAccountIds,
                         )
                       }
                       className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
@@ -231,10 +224,10 @@ export function TargetPicker({
             )}
           </div>
 
-          {/* Nick Facebook đăng bài */}
+          {/* Tài khoản Facebook chính đích */}
           <div>
             <p className="text-sm font-medium">
-              Nick Facebook đăng bài — đã chọn {selectedMainCount}/{mainAccounts.length} nick
+              Nick Facebook cá nhân đích — đã chọn {selectedAccountIds.length}/{mainAccounts.length} nick
             </p>
             {mainAccounts.length === 0 ? (
               <p className="mt-1 text-sm text-[var(--dim)]">
@@ -243,20 +236,26 @@ export function TargetPicker({
             ) : (
               <div className="mt-2 flex flex-wrap gap-2">
                 {mainAccounts.map((a) => {
-                  const on = !!a.selected;
+                  const on = selectedAccountIds.includes(a.id);
                   return (
                     <button
                       key={a.id}
                       aria-pressed={on}
-                      disabled={isMainAccountPending}
-                      onClick={() => onToggleMainAccount(a.id, !on)}
+                      onClick={() =>
+                        onApplyTargets(
+                          selected,
+                          selectedPageIds,
+                          selectedIgIds,
+                          on ? selectedAccountIds.filter((x) => x !== a.id) : [...selectedAccountIds, a.id],
+                        )
+                      }
                       className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
                         on
                           ? "bg-[var(--accent)] text-white"
                           : "border border-[var(--border)] text-[var(--dim)]"
                       }`}
                     >
-                      Nick: {a.name}
+                      Nick cá nhân: {a.name}
                     </button>
                   );
                 })}

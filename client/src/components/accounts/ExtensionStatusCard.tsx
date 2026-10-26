@@ -57,6 +57,10 @@ export function ExtensionStatusCard({
             ))}
           </div>
         )}
+
+        <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-2.5 text-[11px] leading-5 text-amber-200">
+          💡 <strong>Lưu ý để đăng bài tự động thành công (bản v1.2.0):</strong> Khi mã nguồn vừa được cập nhật, hãy mở tab <code>chrome://extensions</code> trên Chrome và bấm nút <strong>Tải lại (🔄 Reload)</strong> trên thẻ <em>Social Desk Connector</em> (phiên bản <strong>v1.2.0</strong>) để Chrome áp dụng cơ chế tự động chờ tải ảnh và chuyển bước Fanpage mới nhất!
+        </div>
       </div>
     </CollapsibleCard>
   );

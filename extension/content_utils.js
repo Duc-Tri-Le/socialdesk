@@ -15,6 +15,22 @@ function isElementVisible(el) {
   return el.offsetWidth > 0 && el.offsetHeight > 0;
 }
 
+// Bấm chuột đầy đủ các sự kiện Pointer/Mouse cho React
+function triggerClick(el) {
+  if (!el) return;
+  try {
+    el.focus();
+    const opts = { bubbles: true, cancelable: true, view: window };
+    el.dispatchEvent(new PointerEvent("pointerdown", opts));
+    el.dispatchEvent(new MouseEvent("mousedown", opts));
+    el.dispatchEvent(new PointerEvent("pointerup", opts));
+    el.dispatchEvent(new MouseEvent("mouseup", opts));
+    el.click();
+  } catch {
+    el.click();
+  }
+}
+
 // Hàm làm sạch và chuẩn hóa đường link bài viết Facebook
 function cleanFacebookPostUrl(rawUrl) {
   if (!rawUrl) return "";
@@ -181,43 +197,40 @@ function scrapeFacebookPostEngagement() {
   return { likes, comments, shares, reach: 0 };
 }
 
-// Hàm tự động phát hiện tên nick Facebook từ trang
+// Hàm tự động phát hiện tên nick Facebook thật từ trang
 function getFacebookProfileInfo() {
   let name = "";
   let profileUrl = "";
 
   try {
-    // 1. Thử lấy từ các liên kết cá nhân trong menu trái/header
+    const isSystemWord = (str) =>
+      /facebook|watch|gaming|video|bảng feed|bạn bè|chưa đọc|đoạn chat|tin nhắn|thông báo|messenger|công cụ|kế hoạch|planner|quản trị|quản lý|trung tâm|quảng cáo|cài đặt|kỷ niệm|đã lưu|chợ|marketplace|meta|business|suite/i.test(
+        str,
+      );
+
+    // 1. Thử lấy từ các liên kết cá nhân /me/ hoặc profile.php
     const candidateLinks = Array.from(
-      document.querySelectorAll('a[href*="/me/"], a[href*="/me?"], a[href*="profile.php"], div[role="navigation"] a[href*="facebook.com/"]')
+      document.querySelectorAll('a[href*="/me/"], a[href*="/me?"], a[href*="profile.php"]'),
     );
     for (const a of candidateLinks) {
-      const text = a.innerText?.trim();
+      const firstLine = (a.innerText || "").split("\n")[0]?.trim() || "";
+      const text = firstLine.trim();
       const href = a.href || "";
-      if (
-        text &&
-        text.length >= 2 &&
-        text.length <= 40 &&
-        !text.includes("Facebook") &&
-        !text.includes("Watch") &&
-        !text.includes("Gaming") &&
-        !text.includes("Video") &&
-        !text.includes("Bảng feed") &&
-        !text.includes("Bạn bè")
-      ) {
+      if (text && text.length >= 2 && text.length <= 40 && !isSystemWord(text)) {
         name = text;
         profileUrl = href;
         break;
       }
     }
 
-    // 2. Thử tìm qua avatar profile aria-label
+    // 2. Thử tìm qua avatar profile trong header
     if (!name) {
       const ariaProfile = document.querySelector('[aria-label="Trang cá nhân của bạn"], [aria-label="Your profile"]');
       if (ariaProfile) {
         const parent = ariaProfile.closest('div[role="button"], a');
-        if (parent && parent.innerText) {
-          name = parent.innerText.trim();
+        const txt = (parent?.innerText || "").trim();
+        if (txt && !isSystemWord(txt)) {
+          name = txt;
         }
       }
     }
@@ -232,4 +245,103 @@ function getFacebookProfileInfo() {
   }
 
   return { name, profileUrl };
+}
+
+// Tìm hộp thoại soạn bài viết thật của Facebook (tránh chọn nhầm tooltip/overlay)
+function getFacebookComposerDialog() {
+  const dialogs = Array.from(document.querySelectorAll('div[role="dialog"]')).filter(isElementVisible);
+  for (let i = dialogs.length - 1; i >= 0; i--) {
+    const d = dialogs[i];
+    if (
+      d.querySelector('div[role="textbox"], div[contenteditable="true"], div[data-lexical-editor="true"]') ||
+      d.querySelector('div[aria-label*="Đăng"], div[aria-label*="Tiếp"]')
+    ) {
+      return d;
+    }
+  }
+  return dialogs.pop() || null;
+}
+
+// Phân loại nút hành động trong hộp thoại Facebook: 'post' (Đăng/Chia sẻ), 'next' (Tiếp tục), hoặc null
+function categorizeFacebookButton(btn) {
+  if (!btn || !isElementVisible(btn)) return null;
+
+  const aria = (btn.getAttribute("aria-label") || "").trim().toLowerCase();
+  const text = (btn.innerText || "").trim().toLowerCase().replace(/\s+/g, " ");
+  const title = (btn.getAttribute("title") || "").trim().toLowerCase();
+
+  const ignorePhrases = [
+    "đóng", "close", "chỉnh sửa", "edit", "gắn thẻ", "tag",
+    "biểu tượng", "cảm xúc", "emoji", "ảnh/video", "photo", "vị trí", "location",
+    "cài đặt", "settings", "đăng ẩn danh", "anonymous", "quyền riêng tư", "privacy"
+  ];
+  if (ignorePhrases.some((p) => aria === p || text === p || aria.startsWith(p + " "))) {
+    return null;
+  }
+
+  const isDisabled =
+    btn.getAttribute("aria-disabled") === "true" ||
+    btn.disabled === true ||
+    btn.getAttribute("disabled") !== null ||
+    btn.classList.contains("disabled");
+
+  const isPost =
+    aria === "đăng" || text === "đăng" || title === "đăng" ||
+    aria === "đăng bài" || text === "đăng bài" ||
+    aria === "post" || text === "post" ||
+    aria === "chia sẻ" || text === "chia sẻ" ||
+    aria === "chia sẻ ngay" || text === "chia sẻ ngay" ||
+    /^(đăng|post|chia sẻ|share)(\s.*)?$/i.test(aria) ||
+    /^(đăng|post|chia sẻ|share)$/i.test(text);
+
+  const isNext =
+    aria === "tiếp" || text === "tiếp" || title === "tiếp" ||
+    aria === "tiếp tục" || text === "tiếp tục" ||
+    aria === "tiếp theo" || text === "tiếp theo" ||
+    aria === "next" || text === "next" ||
+    /^(tiếp|next|tiếp tục|tiếp theo)(\s.*)?$/i.test(aria) ||
+    /^(tiếp|next|tiếp tục|tiếp theo)$/i.test(text);
+
+  if (isPost) {
+    return { type: "post", btn, isDisabled };
+  }
+  if (isNext) {
+    return { type: "next", btn, isDisabled };
+  }
+  return null;
+}
+
+// Tự động nhận diện và đóng các popup gợi ý phát sinh của Facebook sau khi đăng bài
+function dismissFacebookUpsellPopups() {
+  const popups = Array.from(document.querySelectorAll('div[role="dialog"]')).filter(isElementVisible);
+  for (const pop of popups) {
+    const popText = (pop.innerText || "").toLowerCase();
+    if (
+      popText.includes("thêm nút") ||
+      popText.includes("không phải bây giờ") ||
+      popText.includes("lúc khác") ||
+      popText.includes("để sau") ||
+      popText.includes("not now") ||
+      popText.includes("tăng tốc bài viết") ||
+      popText.includes("boost post")
+    ) {
+      const dismissButtons = Array.from(pop.querySelectorAll('div[role="button"], button')).filter(isElementVisible);
+      for (const db of dismissButtons) {
+        const dText = (db.innerText || db.getAttribute("aria-label") || "").toLowerCase().trim();
+        if (
+          dText === "không phải bây giờ" ||
+          dText === "lúc khác" ||
+          dText === "để sau" ||
+          dText === "not now" ||
+          dText === "đóng" ||
+          dText === "close"
+        ) {
+          console.log(`[Social Desk] Đóng popup gợi ý của Facebook: "${dText}"`);
+          db.click();
+          return true;
+        }
+      }
+    }
+  }
+  return false;
 }

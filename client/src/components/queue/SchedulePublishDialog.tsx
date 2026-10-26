@@ -7,9 +7,11 @@ export interface SchedulePublishDialogProps {
   selectedPageIds: number[];
   selectedIgIds: number[];
   selectedGroupIds: number[];
+  selectedAccountIds?: number[];
   allPages: Page[];
   igAccounts: Account[];
   joinedGroups: Group[];
+  mainAccounts?: Account[];
   isSchedulePending: boolean;
   onConfirmSchedule: (scheduledAt: string) => void;
   onCancel: () => void;
@@ -31,9 +33,11 @@ export function SchedulePublishDialog({
   selectedPageIds,
   selectedIgIds,
   selectedGroupIds,
+  selectedAccountIds = [],
   allPages,
   igAccounts,
   joinedGroups,
+  mainAccounts = [],
   isSchedulePending,
   onConfirmSchedule,
   onCancel,
@@ -63,8 +67,9 @@ export function SchedulePublishDialog({
   const pickedPages = allPages.filter((p) => selectedPageIds.includes(p.id));
   const pickedIg = igAccounts.filter((a) => selectedIgIds.includes(a.id));
   const pickedGroups = joinedGroups.filter((g) => selectedGroupIds.includes(g.id));
+  const pickedAccounts = mainAccounts.filter((a) => selectedAccountIds.includes(a.id));
   const nothingPicked =
-    pickedPages.length === 0 && pickedIg.length === 0 && pickedGroups.length === 0;
+    pickedPages.length === 0 && pickedIg.length === 0 && pickedGroups.length === 0 && pickedAccounts.length === 0;
 
   // Tính các gợi ý khung giờ thông minh (không dùng icon)
   const presets = useMemo(() => {

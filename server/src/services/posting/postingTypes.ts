@@ -37,6 +37,7 @@ export const packTargetsOut = z.object({
   group_ids: z.array(z.number()),
   page_ids: z.array(z.number()),
   instagram_account_ids: z.array(z.number()),
+  account_ids: z.array(z.number()).default([]),
 });
 
 export type PackTargets = z.infer<typeof packTargetsOut>;
@@ -45,6 +46,7 @@ export type PackTargetsInput = {
   group_ids: number[];
   page_ids: number[];
   instagram_account_ids: number[];
+  account_ids?: number[];
 };
 
 export const draftOut = z.object({

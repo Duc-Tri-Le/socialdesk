@@ -63,6 +63,7 @@ export const draftPackActions = {
             group_ids: savedTargets.group_ids,
             page_ids: savedTargets.page_ids,
             instagram_account_ids: savedTargets.instagram_account_ids,
+            account_ids: savedTargets.account_ids,
           }
         : await defaultPackTargets(db);
 
@@ -117,6 +118,7 @@ export const draftPackActions = {
       group_ids: z.array(z.number().int().positive()).optional().default([]),
       page_ids: z.array(z.number().int().positive()).optional().default([]),
       instagram_account_ids: z.array(z.number().int().positive()).optional().default([]),
+      account_ids: z.array(z.number().int().positive()).optional().default([]),
     }),
     response: z.object({ ok: z.boolean(), message: z.string() }),
     async handler(ctx, args) {
@@ -130,6 +132,7 @@ export const draftPackActions = {
         group_ids: args.group_ids ?? [],
         page_ids: args.page_ids ?? [],
         instagram_account_ids: args.instagram_account_ids ?? [],
+        account_ids: args.account_ids ?? [],
       };
 
       if (row.status === "draft") {
@@ -188,6 +191,7 @@ export const draftPackActions = {
       group_ids: z.array(z.number().int().positive()).optional().default([]),
       page_ids: z.array(z.number().int().positive()).optional().default([]),
       instagram_account_ids: z.array(z.number().int().positive()).optional().default([]),
+      account_ids: z.array(z.number().int().positive()).optional().default([]),
     }),
     response: z.object({
       ok: z.boolean(),
@@ -212,6 +216,7 @@ export const draftPackActions = {
       const groupIds = args.group_ids ?? [];
       const pageIds = args.page_ids ?? [];
       const igIds = args.instagram_account_ids ?? [];
+      const accountIds = args.account_ids ?? [];
 
       const built = await buildPackTextForDraft(
         db,
@@ -220,6 +225,7 @@ export const draftPackActions = {
           group_ids: groupIds,
           page_ids: pageIds,
           instagram_account_ids: igIds,
+          account_ids: accountIds,
         },
         {
           explicit: true,
@@ -239,6 +245,7 @@ export const draftPackActions = {
             group_ids: groupIds,
             page_ids: pageIds,
             instagram_account_ids: igIds,
+            account_ids: accountIds,
           }),
         })
         .where(eq(schema.drafts.id, args.id));

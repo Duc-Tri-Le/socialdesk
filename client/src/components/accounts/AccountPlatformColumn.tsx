@@ -9,10 +9,7 @@ import {
   SearchInput,
 } from "../ui";
 import { AccountItemCard } from "./AccountItemCard";
-import {
-  PAGE_SIZE,
-  usePlatformAccountManager,
-} from "./hooks/usePlatformAccountManager";
+import { usePlatformAccountManager } from "./hooks/usePlatformAccountManager";
 
 export interface AccountPlatformColumnProps {
   platform: "Facebook" | "Instagram";
@@ -70,14 +67,12 @@ export function AccountPlatformColumn({
     search,
     filter,
     sort,
-    page,
-    totalPages,
     totalItems,
+    paginationProps,
     stats,
     filteredAccounts,
     pagedAccounts,
     setSort,
-    setPage,
     handleSearchChange,
     handleFilterChange,
     handleSelectAll,
@@ -345,16 +340,14 @@ export function AccountPlatformColumn({
         />
       )}
 
-      {/* Phân trang (chỉ hiện khi paged mode và > 1 trang) */}
-      {scrollLayout === "paged" && totalPages > 1 && (
+      {/* Phân trang chuẩn dùng chung (chỉ hiện khi paged mode) */}
+      {scrollLayout === "paged" && totalItems > 0 && (
         <Pagination
-          page={page}
-          totalPages={totalPages}
-          totalItems={totalItems}
-          pageSize={PAGE_SIZE}
+          {...paginationProps}
           itemLabel="tài khoản"
           navLabel={`Phân trang tài khoản ${platform}`}
-          onPageChange={setPage}
+          prevLabel="Trang trước"
+          nextLabel="Trang sau"
         />
       )}
     </section>

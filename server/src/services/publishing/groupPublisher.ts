@@ -85,6 +85,65 @@ export async function prepareGroupQueue(
   return browserQueue;
 }
 
+export async function prepareAccountQueue(
+  db: Db,
+  accountIds: number[],
+  helpers: {
+    alreadyPublished: (kind: string, name: string) => boolean;
+    alreadyQueued: (kind: string, name: string) => boolean;
+    record: (r: PublishResultItem) => Promise<number>;
+  },
+): Promise<BrowserQueueItem[]> {
+  const browserQueue: BrowserQueueItem[] = [];
+  if (accountIds.length === 0) return browserQueue;
+
+  const allAccounts = await db.select().from(schema.accounts);
+  const chosenAccounts = allAccounts.filter(
+    (a) => a.platform === "Facebook" && accountIds.includes(a.id),
+  );
+
+  for (const a of chosenAccounts) {
+    const label = `Tài khoản “${a.name}”`;
+    if (helpers.alreadyPublished("account", a.name)) {
+      await helpers.record({
+        kind: "account",
+        name: a.name,
+        status: "skipped",
+        message: `${label} đã đăng thành công ở lần trước — bỏ qua.`,
+        post_url: "",
+      });
+      continue;
+    }
+    if (helpers.alreadyQueued("account", a.name)) {
+      await helpers.record({
+        kind: "account",
+        name: a.name,
+        status: "skipped",
+        message: `${label} đang được xử lý đăng từ lần trước — chờ kết quả.`,
+        post_url: "",
+      });
+      continue;
+    }
+    const recordId = await helpers.record({
+      kind: "account",
+      name: a.name,
+      status: "queued",
+      message: `${label}: đã tiếp nhận — đang mở Facebook trên Chrome để tự động đăng lên trang cá nhân...`,
+      post_url: "",
+    });
+    browserQueue.push({
+      recordId,
+      kind: "account",
+      name: a.name,
+      url: a.profileUrl || "https://www.facebook.com/",
+      via: [`Nick “${a.name}”`],
+      note: "đăng trang cá nhân qua Chrome Extension",
+    });
+  }
+
+  return browserQueue;
+}
+
 export async function dispatchBrowserQueue(
   db: Db,
   row: { id: number },
@@ -106,14 +165,45 @@ export async function dispatchBrowserQueue(
   const defaultAcc =
     allFbAccounts.find((a) => a.selected === 1) || allFbAccounts[0];
 
+  const allIgAccounts = await db
+    .select()
+    .from(schema.accounts)
+    .where(eq(schema.accounts.platform, "Instagram"));
+
   const finalImages = await prepareDriveImagesAsDataUrls(driveImages);
 
   for (const t of browserQueue) {
-    const kindLabel = t.kind === "group" ? "Nhóm" : "Fanpage";
-    const extCode = defaultAcc?.extensionCode?.trim().toUpperCase() || "";
+    const kindLabel =
+      t.kind === "group"
+        ? "Nhóm"
+        : t.kind === "page"
+          ? "Fanpage"
+          : t.kind === "instagram"
+            ? "Instagram"
+            : "Tài khoản cá nhân";
+
+    let targetAcc = defaultAcc;
+    if (t.kind === "instagram") {
+      targetAcc =
+        allIgAccounts.find(
+          (a) => a.name.toLowerCase() === t.name.toLowerCase(),
+        ) ||
+        allIgAccounts.find((a) => a.selected === 1) ||
+        allIgAccounts[0];
+    } else if (t.kind === "account") {
+      targetAcc =
+        allFbAccounts.find(
+          (a) => a.name.toLowerCase() === t.name.toLowerCase(),
+        ) || defaultAcc;
+    }
+
+    const extCode =
+      targetAcc?.extensionCode?.trim().toUpperCase() ||
+      defaultAcc?.extensionCode?.trim().toUpperCase() ||
+      "";
 
     if (!extCode) {
-      const noCodeMsg = `${kindLabel} "${t.name}": Tài khoản "${defaultAcc?.name || "Facebook"}" chưa được gán Mã Extension Chrome. Vui lòng vào mục "Tài khoản" để gán mã từ Chrome tương ứng.`;
+      const noCodeMsg = `${kindLabel} "${t.name}": Chưa được gán Mã Extension Chrome. Vui lòng vào mục "Tài khoản" để gán mã từ Chrome tương ứng.`;
       await db
         .update(schema.publishRecords)
         .set({ status: "failed", message: noCodeMsg })
@@ -146,19 +236,26 @@ export async function dispatchBrowserQueue(
 
     if (typeof sendTask === "function") {
       try {
+        const destPlatform = t.kind === "instagram" ? "Instagram" : "Facebook";
         await db
           .update(schema.publishRecords)
           .set({
-            message: `Đang gửi lệnh tới Chrome [${extCode}] để mở Facebook và tự động đăng bài vào ${kindLabel} "${t.name}"...`,
+            message: `Đang gửi lệnh tới Chrome [${extCode}] để mở ${destPlatform} và tự động đăng bài vào ${kindLabel} "${t.name}"...`,
           })
           .where(eq(schema.publishRecords.id, t.recordId));
+
+        const defaultUrl =
+          t.kind === "instagram"
+            ? "https://www.instagram.com/"
+            : "https://www.facebook.com/";
 
         const taskPayload = {
           action: "PUBLISH_POST",
           taskId: `task_${Date.now()}_${t.recordId}`,
           draftId: row.id,
+          targetKind: t.kind,
           targetName: t.name,
-          targetUrl: t.url || "https://www.facebook.com/",
+          targetUrl: t.kind === "instagram" ? "https://www.instagram.com/" : (t.url || defaultUrl),
           caption,
           images: finalImages,
         };
@@ -170,7 +267,7 @@ export async function dispatchBrowserQueue(
             const finalMsg =
               res?.message ||
               (finalStatus === "published"
-                ? "Đã đăng thành công lên Facebook"
+                ? `Đã đăng thành công lên ${destPlatform}`
                 : "Đăng bài thất bại");
             await db
               .update(schema.publishRecords)

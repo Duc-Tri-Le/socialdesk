@@ -69,7 +69,23 @@ export function AccountExtensionPanel({
           )}
         </div>
 
-        <div className="flex items-center gap-1 shrink-0">
+        <div className="flex items-center gap-1 shrink-0 flex-wrap">
+          {onlineCodes.length > 0 && !onlineCodes.includes(extCode) && (
+            <button
+              type="button"
+              onClick={() =>
+                onSaveExtensionCode({
+                  id: a.id,
+                  extension_code: onlineCodes[0] ?? "",
+                })
+              }
+              disabled={isSaveExtensionCodePending}
+              className="inline-flex items-center gap-1 rounded bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[11px] font-semibold text-emerald-400 hover:bg-emerald-500/25 transition-colors"
+              title={`Gán mã Chrome online (${onlineCodes[0]}) cho tài khoản này`}
+            >
+              Gán [{onlineCodes[0]}]
+            </button>
+          )}
           <button
             type="button"
             onClick={handleRetry}

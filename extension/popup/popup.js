@@ -45,6 +45,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     await chrome.storage.local.set({ extensionCode: currentCode });
   }
   codeEl.textContent = currentCode;
+  // Báo cho background đăng ký mã ngay lập tức
+  chrome.runtime.sendMessage({ action: "REGISTER" }).catch(() => {});
 
   if (data.serverUrl) {
     serverUrlInput.value = data.serverUrl;

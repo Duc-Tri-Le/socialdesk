@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api";
 import { useAccountMutations } from "../accounts/useAccountMutations";
@@ -54,7 +54,7 @@ export function AccountsSection({
   const connectedExtQ = useQuery({
     queryKey: ["connectedExtensions"],
     queryFn: () => api.getConnectedExtensions({}),
-    refetchInterval: 3000,
+    refetchInterval: 2500,
   });
 
   const onlineCodes = useMemo(() => {
@@ -62,6 +62,16 @@ export function AccountsSection({
       c.toUpperCase(),
     );
   }, [connectedExtQ.data?.online_codes]);
+
+  const prevCodesRef = useRef<string>("");
+  useEffect(() => {
+    const serialized = onlineCodes.join(",");
+    if (prevCodesRef.current !== "" && prevCodesRef.current !== serialized) {
+      queryClient.invalidateQueries({ queryKey: ["overview"] });
+      queryClient.invalidateQueries({ queryKey: ["accounts"] });
+    }
+    prevCodesRef.current = serialized;
+  }, [onlineCodes, queryClient]);
 
   // Mutations
   const {
@@ -80,9 +90,14 @@ export function AccountsSection({
     refetchExtensions: connectedExtQ.refetch,
   });
 
-  const handleGlobalRetry = () => {
-    connectedExtQ.refetch();
+  const handleGlobalRetry = async () => {
     setMsg("Đang kiểm tra lại tín hiệu từ toàn bộ Chrome Extension...");
+    try {
+      const res = await api.retryConnectedExtensions({});
+      if (res?.message) setMsg(res.message);
+    } catch {}
+    connectedExtQ.refetch();
+    queryClient.invalidateQueries({ queryKey: ["overview"] });
   };
 
   // Phân tách tài khoản theo nền tảng

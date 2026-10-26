@@ -113,28 +113,50 @@ export interface PaginationProps {
 
 /**
  * Thuật toán tính danh sách trang:
- * - Quy tắc hiển thị tối đa 5 phần tử (số trang + dấu '…').
+ * - Quy tắc hiển thị tối đa 7 phần tử (số trang + dấu '…').
  * - Bắt buộc luôn hiển thị trang đầu (1) và trang cuối (total).
- * - Nếu nhiều hơn 5 trang thì hiển thị '…' ở khoảng trống.
+ * - Xung quanh trang hiện tại luôn hiển thị trang trước (current - 1) và trang sau (current + 1).
+ *   Ví dụ:
+ *     - Ở trang 3: hiển thị [1, 2, 3, 4, 5, "…", total] (có cả trang 2 và 4)
+ *     - Ở trang 5: hiển thị [1, "…", 4, 5, 6, "…", total] (có cả trang 4 và 6)
+ * - Trang nào không hiển thị được thay thế bằng dấu '…' ở khoảng trống.
  */
 export function computePagination(
   current: number,
   total: number,
 ): (number | "…")[] {
-  if (total <= 5) {
+  if (total <= 1) return [1];
+  if (total <= 7) {
     return Array.from({ length: total }, (_, i) => i + 1);
   }
 
-  // Luôn có trang đầu (1) và trang cuối (total), tổng cộng tối đa 5 phần tử
-  if (current <= 3) {
-    return [1, 2, 3, "…", total];
+  const safeCurrent = Math.min(Math.max(1, current), total);
+
+  // TH1: Gần đầu (safeCurrent <= 4)
+  // [1, 2, 3, 4, 5, "…", total]
+  // - Ở trang 1: hiển thị 1, 2, 3, 4, 5, "…", total
+  // - Ở trang 2: có 1, 3 bên cạnh
+  // - Ở trang 3: có 2, 4 bên cạnh
+  // - Ở trang 4: có 3, 5 bên cạnh
+  if (safeCurrent <= 4) {
+    return [1, 2, 3, 4, 5, "…", total];
   }
 
-  if (current >= total - 2) {
-    return [1, "…", total - 2, total - 1, total];
+  // TH2: Gần cuối (safeCurrent >= total - 3)
+  // [1, "…", total - 4, total - 3, total - 2, total - 1, total]
+  // - Ví dụ total = 10: safeCurrent >= 7 -> [1, "…", 6, 7, 8, 9, 10]
+  // - Ở trang 7: có 6, 8 bên cạnh
+  // - Ở trang 8: có 7, 9 bên cạnh
+  // - Ở trang 9: có 8, 10 bên cạnh
+  if (safeCurrent >= total - 3) {
+    return [1, "…", total - 4, total - 3, total - 2, total - 1, total];
   }
 
-  return [1, "…", current, "…", total];
+  // TH3: Ở giữa (safeCurrent > 4 và safeCurrent < total - 3)
+  // [1, "…", safeCurrent - 1, safeCurrent, safeCurrent + 1, "…", total]
+  // - Ví dụ total = 10, safeCurrent = 5: [1, "…", 4, 5, 6, "…", 10] (có cả 4 và 6)
+  // - Ví dụ total = 10, safeCurrent = 6: [1, "…", 5, 6, 7, "…", 10] (có cả 5 và 7)
+  return [1, "…", safeCurrent - 1, safeCurrent, safeCurrent + 1, "…", total];
 }
 
 /**

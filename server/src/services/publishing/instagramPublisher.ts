@@ -13,6 +13,7 @@ import {
 import type {
   IgQueueItem,
   PublishResultItem,
+  BrowserQueueItem,
 } from "./publishTypes";
 
 export async function prepareInstagramQueue(
@@ -22,13 +23,14 @@ export async function prepareInstagramQueue(
   caption: string,
   localFiles: string[],
   driveImagesCount: number,
-  mediaNote: string,
+  _mediaNote: string,
   helpers: {
     alreadyPublished: (kind: string, name: string) => boolean;
     alreadyQueued: (kind: string, name: string) => boolean;
     alreadyUncertain: (kind: string, name: string) => boolean;
     record: (r: PublishResultItem) => Promise<number>;
   },
+  browserQueue?: BrowserQueueItem[],
 ): Promise<IgQueueItem[]> {
   const igQueue: IgQueueItem[] = [];
   if (accountIds.length === 0) return igQueue;
@@ -85,20 +87,35 @@ export async function prepareInstagramQueue(
       });
       continue;
     }
-    if (localFiles.length === 0) {
+    if (driveImagesCount === 0) {
       await helpers.record({
         kind: "instagram",
         name: a.name,
         status: "failed",
-        message:
-          driveImagesCount === 0
-            ? `${label}: bài chưa có ảnh nào đã chốt — Instagram chỉ đăng được bài có ảnh/video. Gắn ảnh vào bài ở khâu soạn rồi đăng lại.`
-            : `${label}: không tải về được ảnh đã chốt để đăng${mediaNote}. Thử lại sau.`,
+        message: `${label}: bài chưa có ảnh nào đã chốt — Instagram chỉ đăng được bài có ảnh/video. Gắn ảnh vào bài ở khâu soạn rồi đăng lại.`,
         post_url: "",
       });
       continue;
     }
-    if (!igRefs) {
+    if (!igRefs || localFiles.length === 0) {
+      if (browserQueue) {
+        const recordId = await helpers.record({
+          kind: "instagram",
+          name: a.name,
+          status: "queued",
+          message: `${label}: đã tiếp nhận — đang mở Instagram trên Chrome để tự động đăng bài...`,
+          post_url: "",
+        });
+        browserQueue.push({
+          recordId,
+          kind: "instagram",
+          name: a.name,
+          url: "https://www.instagram.com/",
+          via: [`Instagram “${a.name}”`],
+          note: "đăng qua Chrome Extension",
+        });
+        continue;
+      }
       await helpers.record({
         kind: "instagram",
         name: a.name,
@@ -113,6 +130,24 @@ export async function prepareInstagramQueue(
       igRefs.find((r) => username && r.username.toLowerCase() === username) ??
       (igRefs.length === 1 && chosenIg.length === 1 ? igRefs[0] : undefined);
     if (!match) {
+      if (browserQueue) {
+        const recordId = await helpers.record({
+          kind: "instagram",
+          name: a.name,
+          status: "queued",
+          message: `${label}: đã tiếp nhận — đang mở Instagram trên Chrome để tự động đăng bài...`,
+          post_url: "",
+        });
+        browserQueue.push({
+          recordId,
+          kind: "instagram",
+          name: a.name,
+          url: "https://www.instagram.com/",
+          via: [`Instagram “${a.name}”`],
+          note: "đăng qua Chrome Extension",
+        });
+        continue;
+      }
       await helpers.record({
         kind: "instagram",
         name: a.name,

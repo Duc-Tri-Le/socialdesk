@@ -299,4 +299,30 @@ export const accountCrudActions = {
       return { online_codes: codes };
     },
   }),
+
+  retryConnectedExtensions: defineAction({
+    request: z.object({}),
+    response: z.object({
+      ok: z.boolean(),
+      online_codes: z.array(z.string()),
+      message: z.string(),
+    }),
+    async handler(ctx) {
+      const globalAny = globalThis as any;
+      if (typeof globalAny.__socialDeskPingExtensions === "function") {
+        globalAny.__socialDeskPingExtensions();
+      }
+      ctx.invalidateQueries();
+      const getCodes = globalAny.__socialDeskGetOnlineExtensionCodes;
+      const codes = typeof getCodes === "function" ? getCodes() : [];
+      return {
+        ok: true,
+        online_codes: codes,
+        message:
+          codes.length > 0
+            ? `Đã nhận tín hiệu từ ${codes.length} Chrome Extension (${codes.join(", ")}).`
+            : "Đã gửi tín hiệu kiểm tra tới toàn bộ Chrome Extension.",
+      };
+    },
+  }),
 };
