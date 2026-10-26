@@ -24,6 +24,7 @@ export interface AccountTableViewProps {
   isSaveNamePending: boolean;
   onRetryConnection?: () => void;
   onMsg: (msg: string) => void;
+  onSwitchProfile?: (args: { id: number }) => void;
 }
 
 export function AccountTableView({
@@ -44,6 +45,7 @@ export function AccountTableView({
   isSaveNamePending,
   onRetryConnection,
   onMsg,
+  onSwitchProfile,
 }: AccountTableViewProps) {
   const pagination = usePagination(accounts, { pageSize: 10 });
   const prevAccountsRef = useRef(accounts);
@@ -147,6 +149,7 @@ export function AccountTableView({
               onRetryConnection={onRetryConnection}
               onMsg={onMsg}
               onRequestDelete={handleRequestDelete}
+              onSwitchProfile={onSwitchProfile}
             />
           ))}
         </tbody>

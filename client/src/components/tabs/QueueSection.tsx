@@ -39,6 +39,7 @@ export function QueueSection({
     feedback,
     setMainAccount,
     approve,
+    unapprove,
     update,
     pack,
     saveTargets,
@@ -51,6 +52,10 @@ export function QueueSection({
     onApproveSuccess: () => {
       setQueueTab("ready");
       setQueuePage((s) => ({ ...s, ready: 1 }));
+    },
+    onUnapproveSuccess: () => {
+      setQueueTab("draft");
+      setQueuePage((s) => ({ ...s, draft: 1 }));
     },
     onPublishSuccess: () => {
       setQueueTab("history");
@@ -301,6 +306,8 @@ export function QueueSection({
                   onGoMedia={onGoMedia}
                   onApprove={(id) => approve.mutate(id)}
                   isApprovePending={approve.isPending}
+                  onUnapprove={(id) => unapprove.mutate(id)}
+                  isUnapprovePending={unapprove.isPending}
                   onUpdateCaption={(args) => update.mutate(args)}
                   isUpdatePending={update.isPending}
                   onPack={(args) => pack.mutate(args)}

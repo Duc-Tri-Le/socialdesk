@@ -6,6 +6,8 @@ export interface QueueDraftActionsProps {
   isDraft: boolean;
   isApprovePending: boolean;
   onApprove: (id: number) => void;
+  onUnapprove: (id: number) => void;
+  isUnapprovePending: boolean;
   publishConfirm: boolean;
   onTogglePublishConfirm: () => void;
   isPublishPending: boolean;
@@ -28,6 +30,8 @@ export function QueueDraftActions({
   isDraft,
   isApprovePending,
   onApprove,
+  onUnapprove,
+  isUnapprovePending,
   publishConfirm,
   onTogglePublishConfirm,
   isPublishPending,
@@ -75,6 +79,17 @@ export function QueueDraftActions({
             onClick={onToggleSchedule}
           >
             {d.scheduled_at ? "Đổi giờ hẹn" : "Lên lịch đăng"}
+          </button>
+
+          <button
+            type="button"
+            className={`${btnGhost} whitespace-nowrap font-medium text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-700/60 hover:bg-amber-50 dark:hover:bg-amber-950/40 cursor-pointer`}
+            disabled={isUnapprovePending}
+            aria-label={`Mở khóa duyệt bài ${d.product_name} để sửa hoặc viết lại`}
+            title="Chuyển bài về tab Chờ duyệt để sửa nội dung hoặc yêu cầu AI viết lại"
+            onClick={() => onUnapprove(d.id)}
+          >
+            {isUnapprovePending ? "Đang mở khóa…" : "🔓 Mở khóa duyệt"}
           </button>
         </>
       )}

@@ -259,4 +259,46 @@ export const draftPackActions = {
       };
     },
   }),
+
+  unapproveDraft: defineAction({
+    request: z.object({ id: z.number().int().positive() }),
+    response: z.object({ ok: z.boolean(), message: z.string() }),
+    async handler(ctx, args) {
+      const db = ctx.db<typeof schema>();
+      const [row] = await db
+        .select()
+        .from(schema.drafts)
+        .where(eq(schema.drafts.id, args.id));
+      if (!row) return { ok: false, message: "Không tìm thấy bản nháp." };
+      if (row.status === "draft") {
+        return {
+          ok: false,
+          message: "Bản nháp này đang ở trạng thái Chờ duyệt.",
+        };
+      }
+      if (row.status !== "approved" && row.status !== "packed") {
+        return {
+          ok: false,
+          message: `Bản nháp đang ở trạng thái ${row.status}, không thể mở khóa duyệt.`,
+        };
+      }
+
+      await db
+        .update(schema.drafts)
+        .set({
+          status: "draft",
+          packText: "",
+          packedAt: null,
+          scheduledAt: null,
+        })
+        .where(eq(schema.drafts.id, args.id));
+      ctx.invalidateQueries();
+
+      return {
+        ok: true,
+        message: `Đã mở khóa duyệt bài ${row.code} — chuyển về tab Chờ duyệt để bạn sửa nội dung hoặc yêu cầu AI viết lại.`,
+      };
+    },
+  }),
 };
+

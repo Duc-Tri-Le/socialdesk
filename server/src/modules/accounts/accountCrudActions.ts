@@ -325,4 +325,54 @@ export const accountCrudActions = {
       };
     },
   }),
+
+  switchAccountProfile: defineAction({
+    request: z.object({ id: z.number().int().positive() }),
+    response: z.object({ ok: z.boolean(), message: z.string() }),
+    async handler(ctx, args) {
+      const db = ctx.db<typeof schema>();
+      const [row] = await db
+        .select()
+        .from(schema.accounts)
+        .where(eq(schema.accounts.id, args.id));
+      if (!row) return { ok: false, message: "Không tìm thấy tài khoản." };
+      if (row.platform !== "Facebook") {
+        return { ok: false, message: "Chuyển nick tự động hiện chỉ hỗ trợ tài khoản Facebook." };
+      }
+      const code = (row.extensionCode || "").trim().toUpperCase();
+      if (!code) {
+        return {
+          ok: false,
+          message: `Tài khoản "${row.name}" chưa gán mã Chrome Extension.`,
+        };
+      }
+      const globalAny = globalThis as any;
+      if (typeof globalAny.__socialDeskSendExtensionTask !== "function") {
+        return { ok: false, message: "Hệ thống kết nối Extension chưa sẵn sàng trên máy chủ." };
+      }
+      try {
+        const res: any = await globalAny.__socialDeskSendExtensionTask(
+          code,
+          {
+            action: "SWITCH_PROFILE",
+            taskId: `switch-${Date.now()}`,
+            platform: "Facebook",
+            targetName: row.name,
+            targetUrl: row.profileUrl || "https://www.facebook.com/",
+          },
+          35000,
+        );
+        ctx.invalidateQueries();
+        return {
+          ok: res?.success !== false,
+          message: res?.message || `Đã chuyển sang tài khoản Facebook "${row.name}" trên Chrome.`,
+        };
+      } catch (err: any) {
+        return {
+          ok: false,
+          message: err?.message || "Không thể gửi yêu cầu chuyển nick tới Chrome Extension.",
+        };
+      }
+    },
+  }),
 };

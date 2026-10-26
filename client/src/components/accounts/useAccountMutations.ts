@@ -109,6 +109,21 @@ export function useAccountMutations({
     },
   });
 
+  const switchProfile = useMutation({
+    mutationFn: (args: { id: number }) => {
+      setMsg("Đang gửi lệnh chuyển nick tới Chrome và tìm nút đổi profile Facebook...");
+      return api.switchAccountProfile(args);
+    },
+    onSuccess: (res) => {
+      setMsg(res.message);
+      refresh();
+      refetchExtensions();
+    },
+    onError: (err) => {
+      setMsg(`Lỗi chuyển tài khoản: ${err instanceof Error ? err.message : "quá thời gian chờ phản hồi từ Chrome"}`);
+    },
+  });
+
   return {
     addAccount,
     select,
@@ -118,5 +133,6 @@ export function useAccountMutations({
     del,
     saveUrl,
     saveName,
+    switchProfile,
   };
 }

@@ -7,9 +7,11 @@ import { useComposeJobs } from "../../context/ComposeJobsContext";
 export function useQueueMutations({
   onPublishSuccess,
   onApproveSuccess,
+  onUnapproveSuccess,
 }: {
   onPublishSuccess?: () => void;
   onApproveSuccess?: () => void;
+  onUnapproveSuccess?: () => void;
 } = {}) {
   const queryClient = useQueryClient();
   const composeJobs = useComposeJobs();
@@ -37,6 +39,28 @@ export function useQueueMutations({
         onApproveSuccess?.();
       }
       refresh();
+    },
+  });
+
+  const unapprove = useMutation({
+    mutationFn: (id: number) => api.unapproveDraft({ id }),
+    onSuccess: (res, id) => {
+      setFeedback((f) => ({ ...f, [id]: { ok: res.ok, text: res.message } }));
+      if (res.ok) {
+        onUnapproveSuccess?.();
+      }
+      refresh();
+    },
+    onError: (err, id) => {
+      setFeedback((f) => ({
+        ...f,
+        [id]: {
+          ok: false,
+          text: `Mở khóa duyệt thất bại: ${
+            err instanceof Error ? err.message : "lỗi không rõ"
+          }`,
+        },
+      }));
     },
   });
 
@@ -238,6 +262,7 @@ export function useQueueMutations({
     setFeedback,
     setMainAccount,
     approve,
+    unapprove,
     update,
     pack,
     saveTargets,

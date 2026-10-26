@@ -29,6 +29,8 @@ export interface QueueDraftCardProps {
   onGoMedia: () => void;
   onApprove: (id: number) => void;
   isApprovePending: boolean;
+  onUnapprove?: (id: number) => void;
+  isUnapprovePending?: boolean;
   onUpdateCaption: (args: { id: number; caption: string }) => void;
   isUpdatePending: boolean;
   onPack: (args: {
@@ -83,6 +85,8 @@ export function QueueDraftCard({
   onGoMedia,
   onApprove,
   isApprovePending,
+  onUnapprove,
+  isUnapprovePending = false,
   onUpdateCaption,
   isUpdatePending,
   onPack,
@@ -260,6 +264,8 @@ export function QueueDraftCard({
         isDraft={isDraft}
         isApprovePending={isApprovePending}
         onApprove={onApprove}
+        onUnapprove={onUnapprove ?? (() => {})}
+        isUnapprovePending={isUnapprovePending}
         publishConfirm={publishConfirm}
         onTogglePublishConfirm={() => {
           setScheduleOpen(false);

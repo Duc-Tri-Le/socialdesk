@@ -36,6 +36,7 @@ export interface AccountPlatformColumnProps {
   onRetryConnection?: () => void;
   onMsg: (msg: string) => void;
   onOpenAddForm: () => void;
+  onSwitchProfile?: (args: { id: number }) => void;
 }
 
 export function AccountPlatformColumn({
@@ -60,6 +61,7 @@ export function AccountPlatformColumn({
   onRetryConnection,
   onMsg,
   onOpenAddForm,
+  onSwitchProfile,
 }: AccountPlatformColumnProps) {
   const isFb = platform === "Facebook";
 
@@ -304,6 +306,7 @@ export function AccountPlatformColumn({
             isSaveNamePending={isSaveNamePending}
             onRetryConnection={onRetryConnection}
             onMsg={onMsg}
+            onSwitchProfile={onSwitchProfile}
           />
         ))}
       </ul>

@@ -7,6 +7,7 @@ import {
   parsePackTargets,
   serializePackTargets,
 } from "../server/src/services/posting/packBuilder";
+import { draftPackActions } from "../server/src/modules/drafts/draftPackActions";
 import { eq } from "drizzle-orm";
 
 describe("Draft Pack Builder & Targets", () => {
@@ -153,4 +154,67 @@ describe("Draft Pack Builder & Targets", () => {
     expect(result.packText).toContain("Instagram:\n- Instagram DucGarage");
     expect(result.packText).not.toContain("Tài khoản đăng:");
   });
+
+  it("unapproveDraft từ chối nếu không tìm thấy bản nháp", async () => {
+    const sqlite = new Database(":memory:");
+    sqlite.run(`CREATE TABLE drafts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      code TEXT NOT NULL,
+      status TEXT NOT NULL,
+      pack_text TEXT,
+      packed_at INTEGER,
+      scheduled_at INTEGER
+    )`);
+    const db = drizzle(sqlite, { schema });
+    // @ts-expect-error mock ctx
+    const ctx = { db: () => db, invalidateQueries: () => {} };
+    const res = await draftPackActions.unapproveDraft.handler(ctx, { id: 999999 });
+    expect(res.ok).toBe(false);
+    expect(res.message).toBe("Không tìm thấy bản nháp.");
+  });
+
+  it("unapproveDraft từ chối nếu bản nháp vốn đang là draft (Chờ duyệt)", async () => {
+    const sqlite = new Database(":memory:");
+    sqlite.run(`CREATE TABLE drafts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      code TEXT NOT NULL,
+      status TEXT NOT NULL,
+      pack_text TEXT,
+      packed_at INTEGER,
+      scheduled_at INTEGER
+    )`);
+    sqlite.run(`INSERT INTO drafts (id, code, status) VALUES (1, 'D-001', 'draft')`);
+    const db = drizzle(sqlite, { schema });
+    // @ts-expect-error mock ctx
+    const ctx = { db: () => db, invalidateQueries: () => {} };
+    const res = await draftPackActions.unapproveDraft.handler(ctx, { id: 1 });
+    expect(res.ok).toBe(false);
+    expect(res.message).toContain("Chờ duyệt");
+  });
+
+  it("unapproveDraft mở khóa thành công bản nháp đã duyệt / xuất gói", async () => {
+    const sqlite = new Database(":memory:");
+    sqlite.run(`CREATE TABLE drafts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      code TEXT NOT NULL,
+      status TEXT NOT NULL,
+      pack_text TEXT,
+      packed_at INTEGER,
+      scheduled_at INTEGER
+    )`);
+    sqlite.run(`INSERT INTO drafts (id, code, status, pack_text, scheduled_at) VALUES (2, 'D-002', 'packed', 'sample pack text', 1700000000)`);
+    const db = drizzle(sqlite, { schema });
+    // @ts-expect-error mock ctx
+    const ctx = { db: () => db, invalidateQueries: () => {} };
+    const res = await draftPackActions.unapproveDraft.handler(ctx, { id: 2 });
+    expect(res.ok).toBe(true);
+    expect(res.message).toContain("Đã mở khóa duyệt bài D-002");
+
+    const [updated] = await db.select().from(schema.drafts).where(eq(schema.drafts.id, 2));
+    expect(updated?.status).toBe("draft");
+    expect(updated?.packText).toBe("");
+    expect(updated?.packedAt).toBeNull();
+    expect(updated?.scheduledAt).toBeNull();
+  });
 });
+

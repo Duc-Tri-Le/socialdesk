@@ -30,6 +30,7 @@ export interface AccountTableRowProps {
   onRetryConnection?: () => void;
   onMsg: (msg: string) => void;
   onRequestDelete: (account: Account) => void;
+  onSwitchProfile?: (args: { id: number }) => void;
 }
 
 export function AccountTableRow({
@@ -49,6 +50,7 @@ export function AccountTableRow({
   onRetryConnection,
   onMsg,
   onRequestDelete,
+  onSwitchProfile,
 }: AccountTableRowProps) {
   const isFb = a.platform === "Facebook";
   const myPages = pages.filter((p) => p.account_id === a.id);
@@ -132,22 +134,24 @@ export function AccountTableRow({
                 </div>
               ) : (
                 <div className="flex items-center gap-1.5 flex-wrap">
-                  <span
-                    className="font-bold text-[var(--text)] truncate max-w-[170px]"
-                    title={a.name}
-                  >
-                    {a.name || (isFb ? "Nick Facebook" : "Nick Instagram")}
-                  </span>
-                  {a.profile_url && (
+                  {a.profile_url ? (
                     <a
                       href={a.profile_url}
                       target="_blank"
                       rel="noreferrer"
-                      title="Mở trang cá nhân"
-                      className="text-[11px] text-[var(--accent-ink)] hover:underline"
+                      title={`Mở trang ${a.name || (isFb ? "Facebook" : "Instagram")}`}
+                      className="font-bold text-[var(--text)] hover:text-[var(--accent-ink)] hover:underline truncate max-w-[170px] inline-flex items-center gap-1"
                     >
-                      ↗
+                      <span className="truncate">{a.name || (isFb ? "Nick Facebook" : "Nick Instagram")}</span>
+                      <span className="text-[11px] text-[var(--accent-ink)] font-normal shrink-0">↗</span>
                     </a>
+                  ) : (
+                    <span
+                      className="font-bold text-[var(--text)] truncate max-w-[170px]"
+                      title={a.name}
+                    >
+                      {a.name || (isFb ? "Nick Facebook" : "Nick Instagram")}
+                    </span>
                   )}
                 </div>
               )}
@@ -222,8 +226,25 @@ export function AccountTableRow({
                 )}
               </button>
               {myPages.length > 0 && !isExpanded && (
-                <div className="flex items-center gap-1 text-[10px] text-[var(--dim)] truncate max-w-[150px]">
-                  {myPages.map((p) => p.name).join(", ")}
+                <div className="flex flex-wrap items-center gap-x-1 gap-y-0.5 text-[10px] text-[var(--dim)] max-w-[170px]">
+                  {myPages.map((p, idx) => (
+                    <span key={p.id} className="inline-flex items-center">
+                      {p.url ? (
+                        <a
+                          href={p.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          title={`Mở Fanpage ${p.name}`}
+                          className="font-medium text-[var(--accent-ink)] hover:underline truncate max-w-[130px]"
+                        >
+                          {p.name}
+                        </a>
+                      ) : (
+                        <span className="truncate max-w-[130px]">{p.name}</span>
+                      )}
+                      {idx < myPages.length - 1 && <span className="text-[var(--dim)] mr-1">,</span>}
+                    </span>
+                  ))}
                 </div>
               )}
             </div>
@@ -243,6 +264,7 @@ export function AccountTableRow({
           }}
           onSaveUrl={onSaveUrl}
           onRequestDelete={onRequestDelete}
+          onSwitchProfile={onSwitchProfile}
         />
       </tr>
 

@@ -285,29 +285,11 @@ function categorizeFacebookButton(btn) {
     btn.getAttribute("disabled") !== null ||
     btn.classList.contains("disabled");
 
-  const isPost =
-    aria === "đăng" || text === "đăng" || title === "đăng" ||
-    aria === "đăng bài" || text === "đăng bài" ||
-    aria === "post" || text === "post" ||
-    aria === "chia sẻ" || text === "chia sẻ" ||
-    aria === "chia sẻ ngay" || text === "chia sẻ ngay" ||
-    /^(đăng|post|chia sẻ|share)(\s.*)?$/i.test(aria) ||
-    /^(đăng|post|chia sẻ|share)$/i.test(text);
+  const isPost = /^(đăng|post|chia sẻ|share|đăng bài|chia sẻ ngay)(\s.*)?$/i.test(aria) || /^(đăng|post|chia sẻ|share|đăng bài)$/i.test(text);
+  const isNext = /^(tiếp|next|tiếp tục|tiếp theo)(\s.*)?$/i.test(aria) || /^(tiếp|next|tiếp tục|tiếp theo)$/i.test(text);
 
-  const isNext =
-    aria === "tiếp" || text === "tiếp" || title === "tiếp" ||
-    aria === "tiếp tục" || text === "tiếp tục" ||
-    aria === "tiếp theo" || text === "tiếp theo" ||
-    aria === "next" || text === "next" ||
-    /^(tiếp|next|tiếp tục|tiếp theo)(\s.*)?$/i.test(aria) ||
-    /^(tiếp|next|tiếp tục|tiếp theo)$/i.test(text);
-
-  if (isPost) {
-    return { type: "post", btn, isDisabled };
-  }
-  if (isNext) {
-    return { type: "next", btn, isDisabled };
-  }
+  if (isPost) return { type: "post", btn, isDisabled };
+  if (isNext) return { type: "next", btn, isDisabled };
   return null;
 }
 
@@ -316,26 +298,11 @@ function dismissFacebookUpsellPopups() {
   const popups = Array.from(document.querySelectorAll('div[role="dialog"]')).filter(isElementVisible);
   for (const pop of popups) {
     const popText = (pop.innerText || "").toLowerCase();
-    if (
-      popText.includes("thêm nút") ||
-      popText.includes("không phải bây giờ") ||
-      popText.includes("lúc khác") ||
-      popText.includes("để sau") ||
-      popText.includes("not now") ||
-      popText.includes("tăng tốc bài viết") ||
-      popText.includes("boost post")
-    ) {
+    if (/thêm nút|không phải bây giờ|lúc khác|để sau|not now|tăng tốc bài viết|boost post/i.test(popText)) {
       const dismissButtons = Array.from(pop.querySelectorAll('div[role="button"], button')).filter(isElementVisible);
       for (const db of dismissButtons) {
         const dText = (db.innerText || db.getAttribute("aria-label") || "").toLowerCase().trim();
-        if (
-          dText === "không phải bây giờ" ||
-          dText === "lúc khác" ||
-          dText === "để sau" ||
-          dText === "not now" ||
-          dText === "đóng" ||
-          dText === "close"
-        ) {
+        if (/^(không phải bây giờ|lúc khác|để sau|not now|đóng|close)$/i.test(dText)) {
           console.log(`[Social Desk] Đóng popup gợi ý của Facebook: "${dText}"`);
           db.click();
           return true;
@@ -345,3 +312,86 @@ function dismissFacebookUpsellPopups() {
   }
   return false;
 }
+
+// Tìm nút chuyển profile Facebook (trên banner / timeline)
+function findFacebookSwitchButton(targetName = "") {
+  const norm = (targetName || "").toLowerCase().trim();
+  const candidates = Array.from(
+    document.querySelectorAll('div[role="button"], button, a[role="button"]')
+  ).filter(isElementVisible);
+
+  for (const b of candidates) {
+    const aria = (b.getAttribute("aria-label") || "").toLowerCase().trim();
+    const text = (b.innerText || "").toLowerCase().trim().replace(/\s+/g, " ");
+    if (
+      aria.includes("điều khoản") || text.includes("điều khoản") ||
+      aria.includes("ngôn ngữ") || text.includes("ngôn ngữ") ||
+      aria.includes("quyền riêng tư") || text.includes("quyền riêng tư")
+    ) continue;
+
+    const isMatch =
+      aria === "chuyển ngay" || text === "chuyển ngay" ||
+      aria === "chuyển" || text === "chuyển" ||
+      aria === "switch now" || text === "switch now" ||
+      aria.startsWith("chuyển sang") || text.startsWith("chuyển sang") ||
+      aria.includes("chuyển ngay") || text.includes("chuyển ngay") ||
+      aria.includes("chuyển profile") || text.includes("chuyển profile") ||
+      aria.includes("chuyển tài khoản") || text.includes("chuyển tài khoản") ||
+      aria.includes("chuyển đổi tài khoản") || text.includes("chuyển đổi tài khoản") ||
+      aria.includes("switch to") || text.includes("switch to") ||
+      (norm && (aria.includes(norm) || text.includes(norm)) && (aria.includes("chuyển") || text.includes("chuyển") || aria.includes("switch") || text.includes("switch")));
+
+    if (isMatch) return b;
+  }
+  return null;
+}
+
+// Chuyển profile qua menu góc phải Facebook
+async function attemptMenuProfileSwitch(targetName = "") {
+  const norm = (targetName || "").toLowerCase().trim();
+  const trigger = document.querySelector(
+    'div[aria-label="Trang cá nhân của bạn"], div[aria-label="Your profile"], div[aria-label="Tài khoản của bạn"], div[aria-label="Account"], div[role="banner"] div[role="button"][aria-label*="cá nhân"], div[role="banner"] div[role="button"][aria-label*="khoản"]'
+  );
+  if (!trigger || !isElementVisible(trigger)) return false;
+
+  triggerClick(trigger);
+  await sleep(1200);
+
+  let items = Array.from(
+    document.querySelectorAll('div[role="dialog"] div[role="button"], div[role="menu"] div[role="button"], div[role="dialog"] a, div[role="menuitem"]')
+  ).filter(isElementVisible);
+
+  let target = items.find((el) => {
+    const t = (el.innerText || el.getAttribute("aria-label") || "").toLowerCase();
+    return norm && t.includes(norm);
+  });
+
+  if (!target) {
+    const seeAll = items.find((el) => {
+      const t = (el.innerText || el.getAttribute("aria-label") || "").toLowerCase();
+      return t.includes("xem tất cả") || t.includes("see all") || t.includes("chuyển tài khoản") || t.includes("chuyển sang");
+    });
+    if (seeAll) {
+      triggerClick(seeAll);
+      await sleep(1000);
+      items = Array.from(
+        document.querySelectorAll('div[role="dialog"] div[role="button"], div[role="menu"] div[role="button"], div[role="dialog"] a, div[role="menuitem"]')
+      ).filter(isElementVisible);
+      target = items.find((el) => {
+        const t = (el.innerText || el.getAttribute("aria-label") || "").toLowerCase();
+        return norm ? t.includes(norm) : (t.includes("chuyển sang") || t.includes("switch to"));
+      });
+    }
+  }
+
+  if (target) {
+    console.log(`[Social Desk] Bấm chọn nick trong menu: "${target.innerText || target.getAttribute("aria-label")}"`);
+    triggerClick(target);
+    await sleep(3500);
+    return true;
+  }
+
+  triggerClick(trigger);
+  return false;
+}
+

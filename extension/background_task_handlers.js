@@ -294,3 +294,40 @@ function waitForTabComplete(tabId, timeoutMs = 25000) {
     chrome.tabs.onUpdated.addListener(listener);
   });
 }
+
+// Xử lý tác vụ chuyển đổi Profile Facebook tự động trên Chrome
+async function handleSwitchProfileTask(task) {
+  const { taskId, targetName = "", targetUrl = "https://www.facebook.com/" } = task;
+  addLog(`Bắt đầu chuyển sang tài khoản: "${targetName || 'Facebook'}"...`, "info");
+  try {
+    const fbTabs = await chrome.tabs.query({ url: "*://*.facebook.com/*" });
+    let tab = fbTabs.find((t) => t.active) || fbTabs[0];
+    if (tab) {
+      await chrome.tabs.update(tab.id, { url: targetUrl, active: true });
+    } else {
+      tab = await chrome.tabs.create({ url: targetUrl, active: true });
+    }
+    await waitForTabComplete(tab.id, 20000);
+    await new Promise((r) => setTimeout(r, 2000));
+    const ready = await ensureContentScriptReady(tab.id, 3, false);
+    if (!ready) throw new Error("Không thể kết nối với script điều khiển trên tab Facebook.");
+
+    const res = await new Promise((resolve, reject) => {
+      chrome.tabs.sendMessage(tab.id, { action: "DO_SWITCH_PROFILE", targetName }, (r) => {
+        if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
+        else resolve(r || { success: false, message: "Không nhận được phản hồi chuyển profile" });
+      });
+    });
+
+    if (res.success) {
+      addLog(`✓ ${res.message}`, "success");
+    } else {
+      addLog(`✗ ${res.message}`, "error");
+    }
+    sendTaskResult({ taskId, status: res.success ? "success" : "failed", message: res.message });
+  } catch (err) {
+    addLog(`✗ Lỗi chuyển tài khoản: ${err.message}`, "error");
+    sendTaskResult({ taskId, status: "failed", message: err.message });
+  }
+}
+

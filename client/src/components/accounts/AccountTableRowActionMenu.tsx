@@ -11,6 +11,7 @@ export interface AccountTableRowActionMenuProps {
   onStartEditName: () => void;
   onSaveUrl: (args: { id: number; profile_url: string }) => void;
   onRequestDelete: (account: Account) => void;
+  onSwitchProfile?: (args: { id: number }) => void;
 }
 
 export function AccountTableRowActionMenu({
@@ -20,6 +21,7 @@ export function AccountTableRowActionMenu({
   onStartEditName,
   onSaveUrl,
   onRequestDelete,
+  onSwitchProfile,
 }: AccountTableRowActionMenuProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -136,6 +138,21 @@ export function AccountTableRowActionMenu({
           </button>
 
           <div className="my-1 border-t border-[var(--border)]" />
+
+          {a.platform === "Facebook" && onSwitchProfile && (
+            <button
+              type="button"
+              onClick={() => {
+                setIsMenuOpen(false);
+                onSwitchProfile({ id: a.id });
+              }}
+              className="flex w-full items-center gap-2 rounded px-2.5 py-1.5 text-xs font-semibold text-sky-400 hover:bg-sky-500/10"
+              title="Mở Facebook và kích hoạt phiên tài khoản này trên Chrome"
+            >
+              <span>🔄</span>
+              <span>Chuyển nick trên Facebook</span>
+            </button>
+          )}
 
           <button
             type="button"

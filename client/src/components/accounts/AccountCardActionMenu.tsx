@@ -17,6 +17,7 @@ export interface AccountCardActionMenuProps {
     title: string;
     message: ReactNode;
   }) => void;
+  onSwitchProfile?: (args: { id: number }) => void;
 }
 
 export function AccountCardActionMenu({
@@ -28,6 +29,7 @@ export function AccountCardActionMenu({
   onStartEditName,
   onStartEditUrl,
   onRequestConfirm,
+  onSwitchProfile,
 }: AccountCardActionMenuProps) {
   const [showActionMenu, setShowActionMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -168,6 +170,22 @@ export function AccountCardActionMenu({
             <span>🔗</span>
             <span>Sửa link trang cá nhân</span>
           </button>
+
+          {isFb && onSwitchProfile && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setShowActionMenu(false);
+                onSwitchProfile({ id: a.id });
+              }}
+              className="flex w-full items-center gap-2 rounded px-2.5 py-1.5 text-xs font-semibold text-sky-400 hover:bg-sky-500/10 text-left transition-colors"
+              title="Mở Facebook và kích hoạt phiên tài khoản này trên Chrome"
+            >
+              <span>🔄</span>
+              <span>Chuyển nick này trên Facebook</span>
+            </button>
+          )}
 
           <button
             type="button"

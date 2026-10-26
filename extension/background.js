@@ -204,6 +204,8 @@ async function connectWebSocket() {
           handlePublishTask(msg);
         } else if (msg.action === "SCAN_POST_METRICS") {
           handleScanMetricsTask(msg);
+        } else if (msg.action === "SWITCH_PROFILE") {
+          handleSwitchProfileTask(msg);
         }
       } catch (e) {
         console.error("[Social Desk] Lỗi phân tích gói tin WebSocket:", e);
@@ -284,6 +286,97 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         reader.readAsDataURL(blob);
       })
       .catch((err) => sendResponse({ success: false, error: err.message }));
+    return true;
+  }
+
+  if (request.action === "INJECT_LEXICAL_CAPTION") {
+    const tabId = sender.tab?.id;
+    if (!tabId || !request.caption) {
+      sendResponse({ success: false });
+      return false;
+    }
+    chrome.scripting.executeScript({
+      target: { tabId },
+      world: "MAIN",
+      func: (text) => {
+        try {
+          const el = document.querySelector('div[role="dialog"] div[data-lexical-editor="true"]') ||
+                     document.querySelector('div[data-lexical-editor="true"]') ||
+                     document.querySelector('div[role="dialog"] div[contenteditable="true"]');
+          if (!el) return false;
+          const editor = el.__lexicalEditor;
+          if (editor) { try { editor.focus(); } catch (e) {} } else { el.focus(); }
+
+          const p = el.querySelector("p") || el;
+          try {
+            const range = document.createRange();
+            range.selectNodeContents(p);
+            range.collapse(false);
+            const sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(range);
+            document.dispatchEvent(new Event("selectionchange"));
+          } catch (e) {}
+
+          const dt = new DataTransfer();
+          dt.setData("text/plain", text);
+          let pasted = false;
+
+          if (editor && editor._commands) {
+            try {
+              let pasteCmd = null;
+              for (const [cmd] of editor._commands) {
+                if (cmd && (cmd.type === "PASTE_COMMAND" || String(cmd.type).toLowerCase().includes("paste"))) {
+                  pasteCmd = cmd;
+                  break;
+                }
+              }
+              if (pasteCmd) {
+                const fakeEvt = new ClipboardEvent("paste", { bubbles: true, cancelable: true, composed: true, clipboardData: dt });
+                editor.dispatchCommand(pasteCmd, fakeEvt);
+                pasted = true;
+              }
+            } catch (e) {}
+          }
+
+          if (!pasted) {
+            try {
+              const evt = new ClipboardEvent("paste", { bubbles: true, cancelable: true, composed: true, clipboardData: dt });
+              (document.activeElement || el).dispatchEvent(evt);
+            } catch (e) {}
+          }
+
+          const domLen = (el.innerText || el.textContent || "").trim().length;
+          if (domLen < Math.min(text.length * 0.4, 25)) {
+            const lines = text.split(/\r?\n/);
+            for (let i = 0; i < lines.length; i++) {
+              const line = lines[i];
+              if (i > 0) {
+                el.dispatchEvent(new InputEvent("beforeinput", { inputType: "insertParagraph", bubbles: true, cancelable: true }));
+                if (!document.execCommand("insertParagraph", false, null)) document.execCommand("insertLineBreak", false, null);
+              }
+              const d = line.length > 0 ? line : "\u200B";
+              el.dispatchEvent(new InputEvent("beforeinput", { inputType: "insertText", data: d, bubbles: true, cancelable: true }));
+              document.execCommand("insertText", false, d);
+            }
+          }
+          el.dispatchEvent(new Event("input", { bubbles: true }));
+          el.dispatchEvent(new Event("change", { bubbles: true }));
+
+          let astOk = false;
+          if (editor && typeof editor.getEditorState === "function") {
+            try {
+              const s = JSON.stringify(editor.getEditorState().toJSON());
+              astOk = s.length > 60 && !s.includes('"children":[]');
+            } catch (e) {}
+          }
+          return astOk || (el.innerText || el.textContent || "").trim().length >= 10;
+        } catch {
+          return false;
+        }
+      },
+      args: [request.caption],
+    }).then((res) => sendResponse({ success: !!res?.[0]?.result })).catch(() => sendResponse({ success: false }));
     return true;
   }
 

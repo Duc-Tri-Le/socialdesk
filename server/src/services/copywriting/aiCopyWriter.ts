@@ -254,7 +254,7 @@ export async function writeProfessionalCopy(
       break;
     }
   }
-  return { ...buildCaption(f), writer: "template" as const };
+  return { ...buildCaption(f, { previousCaption: previous }), writer: "template" as const };
 }
 
 export async function cleanupLegacyDraftColorPlaceholders(

@@ -155,12 +155,25 @@ export function AccountPages({
 
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5 leading-tight pt-1">
-                      <span
-                        title={p.name}
-                        className="text-sm font-bold text-[var(--text)] truncate max-w-[170px] sm:max-w-[240px]"
-                      >
-                        {p.name || "Fanpage Facebook"}
-                      </span>
+                      {p.url ? (
+                        <a
+                          href={p.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          title={`Mở Fanpage ${p.name || "Facebook"}`}
+                          className="text-sm font-bold text-[var(--text)] hover:text-[var(--accent-ink)] hover:underline truncate max-w-[170px] sm:max-w-[240px] inline-flex items-center gap-1"
+                        >
+                          <span className="truncate">{p.name || "Fanpage Facebook"}</span>
+                          <span className="text-[11px] text-[var(--accent-ink)] font-normal shrink-0">↗</span>
+                        </a>
+                      ) : (
+                        <span
+                          title={p.name}
+                          className="text-sm font-bold text-[var(--text)] truncate max-w-[170px] sm:max-w-[240px]"
+                        >
+                          {p.name || "Fanpage Facebook"}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -191,7 +204,7 @@ export function AccountPages({
                 </div>
               </div>
 
-              {/* 2. KHỐI CHROME EXTENSION (NHƯ TÀI KHOẢN INSTA) */}
+              {/* 2. Trạng thái Extension */}
               <div className="mt-2.5 flex flex-wrap items-center justify-between gap-1.5 rounded-md border border-[var(--border)]/70 bg-[var(--surface-alt)]/50 px-2.5 py-1 text-xs">
                 <div className="flex items-center gap-1.5 min-w-0">
                   <span className="text-[11px] font-medium text-[var(--dim)]">Extension:</span>
@@ -206,14 +219,12 @@ export function AccountPages({
                       Chưa mở Chrome ({extCode})
                     </span>
                   ) : (
-                    <span className="inline-flex items-center gap-1 font-medium text-amber-400 text-[11px]">
-                      Chưa gán Profile
-                    </span>
+                    <span className="inline-flex items-center gap-1 font-medium text-amber-400 text-[11px]">Chưa gán Profile</span>
                   )}
                 </div>
               </div>
 
-              {/* 3. HÀNG THAO TÁC (MỞ TRANG & XÓA) */}
+              {/* 3. Thao tác trang */}
               <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-[var(--border)] pt-2 text-xs">
                 <div className="flex items-center gap-2">
                   {p.url ? (
@@ -224,15 +235,12 @@ export function AccountPages({
                       aria-label={`Mở trang ${p.name}`}
                       className="inline-flex items-center gap-1 font-semibold text-[var(--accent-ink)] hover:underline"
                     >
-                      <span>Mở trang</span>
+                      <span>Mở trang ↗</span>
                     </a>
                   ) : (
                     <button
                       type="button"
-                      onClick={() => {
-                        setEditingPageId(p.id);
-                        setEditUrlDraft("");
-                      }}
+                      onClick={() => { setEditingPageId(p.id); setEditUrlDraft(""); }}
                       className="text-[11px] text-[var(--dim)] hover:text-[var(--text)] underline"
                     >
                       + Gán link
@@ -242,12 +250,8 @@ export function AccountPages({
                   <button
                     type="button"
                     onClick={() => {
-                      if (editingPageId === p.id) {
-                        setEditingPageId(null);
-                      } else {
-                        setEditingPageId(p.id);
-                        setEditUrlDraft(p.url || "");
-                      }
+                      if (editingPageId === p.id) setEditingPageId(null);
+                      else { setEditingPageId(p.id); setEditUrlDraft(p.url || ""); }
                     }}
                     className="text-[11px] text-[var(--dim)] hover:text-[var(--text)] underline"
                     title="Chỉnh sửa link Fanpage"

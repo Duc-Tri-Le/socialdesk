@@ -1,6 +1,7 @@
 import path from "node:path";
 import fs from "node:fs";
 import { fetchGoogleSheetGrid, fetchGoogleDriveFolder } from "./localConnectors";
+import { localAiInferenceComplete } from "./localInference";
 
 export function createLocalContext(db: any, uploadsDir: string) {
   return {
@@ -33,10 +34,8 @@ export function createLocalContext(db: any, uploadsDir: string) {
       };
     },
     inference: {
-      async complete(_prompt: string, _opts?: any) {
-        throw new Error(
-          "Local AI inference not configured, falling back to template.",
-        );
+      async complete(prompt: string, opts?: any) {
+        return await localAiInferenceComplete(prompt, opts);
       },
     },
     agent: {

@@ -83,6 +83,7 @@ export function AccountsSection({
     del,
     saveUrl,
     saveName,
+    switchProfile,
   } = useAccountMutations({
     setMsg,
     setIsAddFormOpen,
@@ -328,6 +329,7 @@ export function AccountsSection({
             onSaveUrl={(args) => saveUrl.mutate(args)}
             isSaveUrlPending={saveUrl.isPending}
             onDelete={(id) => del.mutate(id)}
+            onSwitchProfile={(args) => switchProfile.mutate(args)}
             onMsg={setMsg}
           />
         </section>
@@ -341,9 +343,7 @@ export function AccountsSection({
             pages={pages}
             onlineCodes={onlineCodes}
             scrollLayout={scrollLayout}
-            onToggleScrollLayout={() =>
-              setScrollLayout(scrollLayout === "scroll" ? "paged" : "scroll")
-            }
+            onToggleScrollLayout={() => setScrollLayout(scrollLayout === "scroll" ? "paged" : "scroll")}
             onSelect={(args) => select.mutate(args)}
             isSelectPending={select.isPending}
             onSaveExtensionCode={(args) => saveExtensionCode.mutate(args)}
@@ -356,6 +356,7 @@ export function AccountsSection({
             isSaveUrlPending={saveUrl.isPending}
             onSaveName={(args) => saveName.mutate(args)}
             isSaveNamePending={saveName.isPending}
+            onSwitchProfile={(args) => switchProfile.mutate(args)}
             onRetryConnection={() => connectedExtQ.refetch()}
             onMsg={setMsg}
             onOpenAddForm={() => setIsAddFormOpen(true)}
@@ -368,9 +369,7 @@ export function AccountsSection({
             pages={pages}
             onlineCodes={onlineCodes}
             scrollLayout={scrollLayout}
-            onToggleScrollLayout={() =>
-              setScrollLayout(scrollLayout === "scroll" ? "paged" : "scroll")
-            }
+            onToggleScrollLayout={() => setScrollLayout(scrollLayout === "scroll" ? "paged" : "scroll")}
             onSelect={(args) => select.mutate(args)}
             isSelectPending={select.isPending}
             onSaveExtensionCode={(args) => saveExtensionCode.mutate(args)}

@@ -31,6 +31,7 @@ export interface AccountItemCardProps {
   isSaveNamePending: boolean;
   onRetryConnection?: () => void;
   onMsg: (msg: string) => void;
+  onSwitchProfile?: (args: { id: number }) => void;
 }
 
 export function AccountItemCard({
@@ -51,6 +52,7 @@ export function AccountItemCard({
   isSaveNamePending,
   onRetryConnection,
   onMsg,
+  onSwitchProfile,
 }: AccountItemCardProps) {
   const isFb = a.platform === "Facebook";
   const sessionStatus = a.session_status || (a.linked ? "logged_in" : "expired");
@@ -125,12 +127,25 @@ export function AccountItemCard({
 
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-1.5 leading-tight">
-              <span
-                title={a.name}
-                className="text-sm font-bold text-[var(--text)] truncate max-w-[150px] sm:max-w-[200px]"
-              >
-                {a.name || (isFb ? "Nick Facebook" : "Nick Instagram")}
-              </span>
+              {a.profile_url ? (
+                <a
+                  href={a.profile_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  title={`Mở trang ${a.name || (isFb ? "Facebook" : "Instagram")}`}
+                  className="text-sm font-bold text-[var(--text)] hover:text-[var(--accent-ink)] hover:underline truncate max-w-[150px] sm:max-w-[200px] inline-flex items-center gap-1"
+                >
+                  <span className="truncate">{a.name || (isFb ? "Nick Facebook" : "Nick Instagram")}</span>
+                  <span className="text-[11px] text-[var(--accent-ink)] font-normal shrink-0">↗</span>
+                </a>
+              ) : (
+                <span
+                  title={a.name}
+                  className="text-sm font-bold text-[var(--text)] truncate max-w-[150px] sm:max-w-[200px]"
+                >
+                  {a.name || (isFb ? "Nick Facebook" : "Nick Instagram")}
+                </span>
+              )}
               <span className="rounded bg-[var(--surface-alt)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--dim)]">
                 {isFb ? "Facebook" : "Instagram"}
               </span>
@@ -183,6 +198,7 @@ export function AccountItemCard({
             sessionStatus={sessionStatus}
             onSetSessionStatus={onSetSessionStatus}
             onLink={onLink}
+            onSwitchProfile={onSwitchProfile}
             onStartEditName={() => {
               setIsEditingName(true);
               setNameDraft(a.name);

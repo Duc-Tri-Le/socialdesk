@@ -4,7 +4,6 @@
 console.log("[Social Desk] Instagram content script đã sẵn sàng trên:", window.location.href);
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-const escapeHtml = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
 function isElementVisible(el) {
   if (!el) return false;
@@ -29,7 +28,7 @@ function getInstagramDialog() {
   for (const d of dialogs) {
     if (!isElementVisible(d)) continue;
     const txt = (d.innerText || "").toLowerCase();
-    if (d.querySelector('input[type="file"]') || txt.includes("chọn từ máy tính") || txt.includes("select from computer") || txt.includes("kéo ảnh") || txt.includes("tạo bài viết mới") || txt.includes("create new post") || txt.includes("cắt") || txt.includes("chỉnh sửa")) return d;
+    if (d.querySelector('input[type="file"]') || txt.includes("chọn từ máy tính") || txt.includes("select from computer") || txt.includes("kéo ảnh") || txt.includes("tạo bài viết mới") || txt.includes("cắt") || txt.includes("chỉnh sửa")) return d;
   }
   for (let i = dialogs.length - 1; i >= 0; i--) {
     if (isElementVisible(dialogs[i])) return dialogs[i];
@@ -168,9 +167,8 @@ async function handleInstagramPost(payload) {
       const arr = fileDataUrl.split(",");
       const mime = arr[0].match(/:(.*?);/)?.[1] || "image/jpeg";
       const bstr = atob(arr[1]);
-      let n = bstr.length;
-      const u8arr = new Uint8Array(n);
-      while (n--) u8arr[n] = bstr.charCodeAt(n);
+      const u8arr = new Uint8Array(bstr.length);
+      for (let j = 0; j < bstr.length; j++) u8arr[j] = bstr.charCodeAt(j);
       fileObjects.push(new File([u8arr], `ig_product_${i + 1}.jpg`, { type: mime }));
     } catch (e) {
       console.warn(`[Social Desk] Bỏ qua ảnh #${i + 1}:`, e.message);
@@ -226,15 +224,20 @@ async function handleInstagramPost(payload) {
   if (caption && caption.trim().length > 0) {
     if (!captionEditor) return { success: false, message: "Không tìm thấy ô nhập chú thích bài viết trên Instagram." };
     await fillFormattedCaption(captionEditor, caption);
+    await sleep(1500);
+
+    const dialog = getInstagramDialog() || document;
+    const charCount = getInstagramCharCount(dialog);
     const filledText = (captionEditor.innerText || captionEditor.value || captionEditor.textContent || "").trim();
-    console.log(`[Social Desk] Đã điền xong caption Instagram (${filledText.length} ký tự)`);
-    if (filledText.length < 5) {
+    console.log(`[Social Desk] Caption Instagram: charCount=${charCount}/2,200, domLen=${filledText.length}`);
+
+    if (charCount === 0 || filledText.length < 10) {
       return {
         success: false,
-        message: "Lỗi điền chú thích: Không thể đưa nội dung vào ô bài viết Instagram (ô nhập vẫn trống). Tác vụ đã dừng lại để tránh đăng thiếu nội dung.",
+        message: `Lỗi điền chú thích: Instagram chưa ghi nhận nội dung vào bài viết (Bộ đếm: ${charCount >= 0 ? charCount : 0}/2,200). Đã dừng lại để tránh đăng bài thiếu nội dung. Vui lòng bấm Đăng Bài lại.`,
       };
     }
-    await sleep(1500);
+    await sleep(800);
   }
 
   // 7. Bấm "Chia sẻ" (Share)
@@ -283,91 +286,69 @@ async function handleInstagramPost(payload) {
   return { success: true, postUrl: detectedPostUrl, message: `Đã gửi bài lên Instagram ${targetName ? `"${targetName}"` : ""}` };
 }
 
+function getInstagramCharCount(root) {
+  const m = ((root || getInstagramDialog() || document).innerText || "").match(/([\d.,]+)\s*\/\s*2[,.]?200/);
+  return m ? parseInt(m[1].replace(/[.,]/g, ""), 10) : -1;
+}
+
 // Điền nội dung bài viết giữ trọn vẹn định dạng xuống dòng và khoảng cách dòng
 async function fillFormattedCaption(editor, caption) {
   if (!editor || !caption) return;
   const rawText = caption.trim();
-
-  // 1. Focus và kích hoạt trình soạn thảo
   triggerClick(editor);
   editor.focus();
   await sleep(250);
 
   if (editor.tagName === "TEXTAREA") {
     const desc = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value");
-    if (desc?.set) desc.set.call(editor, rawText);
-    else editor.value = rawText;
-    const tracker = editor._valueTracker;
-    if (tracker) tracker.setValue(rawText);
+    if (desc?.set) desc.set.call(editor, rawText); else editor.value = rawText;
     editor.dispatchEvent(new Event("input", { bubbles: true }));
     editor.dispatchEvent(new Event("change", { bubbles: true }));
     return;
   }
 
-  // 2. Thiết lập Range Selection hợp lệ để Lexical xác định vị trí con trỏ
+  try { await navigator.clipboard.writeText(rawText); } catch {}
+
+  // 1. Tiêm qua MAIN world (Lexical Editor API dispatchCommand)
   try {
-    const sel = window.getSelection();
-    const range = document.createRange();
-    if (editor.childNodes.length > 0) {
-      range.selectNodeContents(editor);
-      range.collapse(false);
-    } else {
-      range.setStart(editor, 0);
-      range.setEnd(editor, 0);
-    }
-    sel.removeAllRanges();
-    sel.addRange(range);
+    const res = await new Promise((r) => chrome.runtime.sendMessage({ action: "INJECT_LEXICAL_CAPTION", caption: rawText }, r));
+    if (res?.success) await sleep(400);
   } catch {}
 
-  let pasteOk = false;
-
-  // Cách 1: Ghi vào Clipboard và gọi execCommand("paste") - kích hoạt paste chuẩn với ngắt dòng
-  try {
-    await navigator.clipboard.writeText(rawText);
-    document.execCommand("paste");
-    await sleep(350);
-    const now1 = (editor.innerText || editor.textContent || "").trim();
-    if (now1.length >= Math.min(rawText.length * 0.4, 25)) pasteOk = true;
-  } catch {}
-
-  // Cách 2: Synthetic ClipboardEvent với cả text/plain và text/html
-  if (!pasteOk) {
+  // 2. Dán qua clipboard hệ thống nếu bộ đếm vẫn 0
+  const dialog = getInstagramDialog() || document;
+  if (getInstagramCharCount(dialog) <= 0) {
     try {
-      const dt = new DataTransfer();
-      dt.setData("text/plain", rawText);
-      const html = rawText.split(/\r?\n/).map((l) => (l ? `<p>${escapeHtml(l)}</p>` : "<p><br></p>")).join("");
-      dt.setData("text/html", html);
-      editor.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }));
+      editor.focus();
+      const p = editor.querySelector("p") || editor;
+      const range = document.createRange();
+      range.selectNodeContents(p);
+      range.collapse(false);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      document.dispatchEvent(new Event("selectionchange"));
+      document.execCommand("paste");
       await sleep(350);
-      const now2 = (editor.innerText || editor.textContent || "").trim();
-      if (now2.length >= Math.min(rawText.length * 0.4, 25)) pasteOk = true;
     } catch {}
   }
 
-  // Cách 3: Chèn từng đoạn qua InputEvent beforeinput và document.execCommand("insertText")
-  if (!pasteOk) {
+  // 3. Fallback: chèn từng đoạn qua beforeinput / execCommand
+  if (getInstagramCharCount(dialog) <= 0 && (editor.innerText || "").trim().length < 10) {
     editor.focus();
     const lines = rawText.split(/\r?\n/);
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
       if (i > 0) {
         editor.dispatchEvent(new InputEvent("beforeinput", { inputType: "insertParagraph", bubbles: true, cancelable: true }));
-        if (!document.execCommand("insertParagraph", false, null)) {
-          document.execCommand("insertLineBreak", false, null);
-        }
+        if (!document.execCommand("insertParagraph", false, null)) document.execCommand("insertLineBreak", false, null);
       }
-      if (line.length > 0) {
-        editor.dispatchEvent(new InputEvent("beforeinput", { inputType: "insertText", data: line, bubbles: true, cancelable: true }));
-        document.execCommand("insertText", false, line);
-      }
+      const d = line.length > 0 ? line : "\u200B";
+      editor.dispatchEvent(new InputEvent("beforeinput", { inputType: "insertText", data: d, bubbles: true, cancelable: true }));
+      document.execCommand("insertText", false, d);
     }
-    await sleep(250);
   }
 
-  // Phát sự kiện input đồng bộ React
-  try {
-    editor.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: rawText }));
-  } catch {}
   editor.dispatchEvent(new Event("input", { bubbles: true }));
   editor.dispatchEvent(new Event("change", { bubbles: true }));
 }
