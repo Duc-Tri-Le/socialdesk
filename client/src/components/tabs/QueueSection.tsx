@@ -5,34 +5,8 @@ import type { Draft } from "../../types";
 import { QueueDraftCard } from "../queue/QueueDraftCard";
 import { QueueHistoryCard } from "../queue/QueueHistoryCard";
 import { EmptyState, Pagination, PillTabs, SearchInput } from "../ui";
-import { fuzzyMatchVi } from "../../utils/search";
+import { matchesDraftSearch } from "../queue/queueHelpers";
 import { useQueueMutations } from "../queue/useQueueMutations";
-
-function matchesDraftSearch(d: Draft, query: string): boolean {
-  if (!query.trim()) return true;
-
-  const targetNames = (d.publish_records ?? [])
-    .map((r) => `${r.target_name} ${r.target_kind}`)
-    .join(" ");
-
-  const combined = [
-    d.product_name,
-    d.caption,
-    d.code,
-    d.sku,
-    d.stt,
-    d.maker,
-    d.color,
-    d.scale,
-    d.price,
-    d.selling_point,
-    targetNames,
-  ]
-    .filter(Boolean)
-    .join(" ");
-
-  return fuzzyMatchVi(combined, query);
-}
 
 export function QueueSection({
   drafts,

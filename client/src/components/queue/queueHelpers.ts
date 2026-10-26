@@ -1,4 +1,65 @@
 import type { Draft } from "../../types";
+import { fuzzyMatchVi } from "../../utils/search";
+
+export function formatScheduledTime(iso: string): string {
+  try {
+    const dt = new Date(iso);
+    return new Intl.DateTimeFormat("vi-VN", {
+      timeZone: "Asia/Ho_Chi_Minh",
+      hour: "2-digit",
+      minute: "2-digit",
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    }).format(dt);
+  } catch {
+    return iso;
+  }
+}
+
+export function getTimeUntil(iso: string): string {
+  try {
+    const dt = new Date(iso);
+    const diffMs = dt.getTime() - Date.now();
+    if (diffMs <= 0) return "đang xử lý hoặc đã tới giờ";
+    const hours = Math.floor(diffMs / (1000 * 60 * 60));
+    const mins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+    if (hours > 24) {
+      const days = Math.floor(hours / 24);
+      return `còn ${days} ngày nữa`;
+    }
+    if (hours > 0) return `còn ${hours}h ${mins}p nữa`;
+    return `còn ${mins} phút nữa`;
+  } catch {
+    return "";
+  }
+}
+
+export function matchesDraftSearch(d: Draft, query: string): boolean {
+  if (!query.trim()) return true;
+
+  const targetNames = (d.publish_records ?? [])
+    .map((r) => `${r.target_name} ${r.target_kind}`)
+    .join(" ");
+
+  const combined = [
+    d.product_name,
+    d.caption,
+    d.code,
+    d.sku,
+    d.stt,
+    d.maker,
+    d.color,
+    d.scale,
+    d.price,
+    d.selling_point,
+    targetNames,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  return fuzzyMatchVi(combined, query);
+}
 
 export function getKindLabel(kind: string): string {
   switch (kind) {
