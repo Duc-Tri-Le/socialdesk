@@ -66,40 +66,40 @@ export function SchedulePublishDialog({
   const nothingPicked =
     pickedPages.length === 0 && pickedIg.length === 0 && pickedGroups.length === 0;
 
-  // Tính các gợi ý khung giờ thông minh
+  // Tính các gợi ý khung giờ thông minh (không dùng icon)
   const presets = useMemo(() => {
-    const list: Array<{ label: string; date: Date; icon: string }> = [];
+    const list: Array<{ label: string; date: Date }> = [];
     const today = new Date();
 
     // 1. Tối nay 19:30 (hoặc tối mai nếu đã quá 19:30)
     const tonight = new Date(today);
     tonight.setHours(19, 30, 0, 0);
     if (tonight.getTime() > now.getTime() + 10 * 60 * 1000) {
-      list.push({ label: "Tối nay (19:30)", date: tonight, icon: "🌙" });
+      list.push({ label: "Tối nay 19:30", date: tonight });
     } else {
       const tomorrowNight = new Date(today);
       tomorrowNight.setDate(tomorrowNight.getDate() + 1);
       tomorrowNight.setHours(19, 30, 0, 0);
-      list.push({ label: "Tối mai (19:30)", date: tomorrowNight, icon: "🌙" });
+      list.push({ label: "Tối mai 19:30", date: tomorrowNight });
     }
 
     // 2. Sáng mai 08:00
     const tomorrowMorning = new Date(today);
     tomorrowMorning.setDate(tomorrowMorning.getDate() + 1);
     tomorrowMorning.setHours(8, 0, 0, 0);
-    list.push({ label: "Sáng mai (08:00)", date: tomorrowMorning, icon: "☀️" });
+    list.push({ label: "Sáng mai 08:00", date: tomorrowMorning });
 
     // 3. Trưa mai 11:30
     const tomorrowNoon = new Date(today);
     tomorrowNoon.setDate(tomorrowNoon.getDate() + 1);
     tomorrowNoon.setHours(11, 30, 0, 0);
-    list.push({ label: "Trưa mai (11:30)", date: tomorrowNoon, icon: "🌤️" });
+    list.push({ label: "Trưa mai 11:30", date: tomorrowNoon });
 
     // 4. Giờ vàng 20:30 tối mai
     const primeTime = new Date(today);
     primeTime.setDate(primeTime.getDate() + 1);
     primeTime.setHours(20, 30, 0, 0);
-    list.push({ label: "Giờ vàng (20:30)", date: primeTime, icon: "⭐" });
+    list.push({ label: "Giờ vàng 20:30", date: primeTime });
 
     return list;
   }, []);
@@ -131,7 +131,7 @@ export function SchedulePublishDialog({
     onConfirmSchedule(chosen.toISOString());
   };
 
-  // Preview định dạng tiếng Việt
+  // Preview định dạng tiếng Việt rõ ràng
   const previewText = useMemo(() => {
     if (!datetimeVal) return "";
     try {
@@ -171,31 +171,29 @@ export function SchedulePublishDialog({
 
   return (
     <div
-      className="mt-3 rounded-2xl border-2 border-indigo-500/40 bg-[var(--surface)] p-4 sm:p-5 space-y-4 shadow-sm"
+      className="mt-3 rounded-[var(--radius)] border-2 border-indigo-500/50 dark:border-indigo-500/60 bg-[var(--surface)] p-4 sm:p-5 space-y-4 shadow-sm"
       role="group"
       aria-label={`Lên lịch đăng bài ${d.product_name}`}
     >
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-[var(--border)] pb-3">
-        <div className="flex items-center gap-2.5">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 text-lg">
-            ⏰
-          </span>
-          <div>
-            <h3 className="text-sm sm:text-base font-bold text-[var(--ink)]">
-              Lên lịch đăng bài tự động
-            </h3>
-            <p className="text-xs text-[var(--dim)]">
-              Bài sẽ tự động được xuất bản khi máy chủ chạy tới giờ hẹn
-            </p>
-          </div>
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] pb-3">
+        <div>
+          <h3 className="text-sm sm:text-base font-bold text-[var(--ink)]">
+            Lên lịch đăng bài tự động
+          </h3>
+          <p className="text-xs text-[var(--dim)] mt-0.5">
+            Hệ thống sẽ tự động xuất bản bài viết đúng thời gian bạn đã chọn
+          </p>
         </div>
+        <span className="rounded-md border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-950/60 px-2.5 py-1 text-[11px] font-semibold text-indigo-800 dark:text-indigo-200">
+          Chế độ hẹn giờ
+        </span>
       </div>
 
       {/* Gợi ý khung giờ nhanh */}
       <div className="space-y-1.5">
         <label className="text-xs font-semibold text-[var(--dim)] block">
-          Chọn nhanh khung giờ tối ưu:
+          Chọn nhanh khung giờ gợi ý:
         </label>
         <div className="flex flex-wrap gap-2">
           {presets.map((p, idx) => (
@@ -203,17 +201,16 @@ export function SchedulePublishDialog({
               key={idx}
               type="button"
               onClick={() => handleApplyPreset(p.date)}
-              className="flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface-alt)] hover:border-indigo-500 hover:text-indigo-500 px-3 py-1.5 text-xs font-medium text-[var(--ink)] transition cursor-pointer"
+              className="rounded-lg border border-[var(--border)] bg-[var(--surface-alt)] hover:border-indigo-500 hover:text-indigo-600 dark:hover:text-indigo-300 px-3 py-1.5 text-xs font-medium text-[var(--text)] transition cursor-pointer"
             >
-              <span>{p.icon}</span>
-              <span>{p.label}</span>
+              {p.label}
             </button>
           ))}
         </div>
       </div>
 
       {/* Input Datetime-Local */}
-      <div className="space-y-1.5">
+      <div className="space-y-2">
         <label className="text-xs font-semibold text-[var(--ink)] block">
           Thời gian đăng bài chính xác:
         </label>
@@ -228,36 +225,36 @@ export function SchedulePublishDialog({
           className={`${inputCls} w-full max-w-sm font-mono text-sm cursor-pointer`}
         />
         {previewText && (
-          <p className="text-xs text-indigo-600 dark:text-indigo-300 font-medium">
-            👉 Dự kiến đăng: <strong>{previewText}</strong>
+          <p className="text-xs text-indigo-700 dark:text-indigo-300 font-medium">
+            Thời điểm đăng dự kiến: <strong>{previewText}</strong>
           </p>
         )}
       </div>
 
       {/* Tóm tắt đích đăng */}
-      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-alt)]/50 p-3 space-y-2 text-xs">
+      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-alt)]/60 p-3 space-y-2 text-xs">
         <div className="font-semibold text-[var(--ink)]">
           Đích đăng sẽ nhận bài ({pickedPages.length + pickedGroups.length + pickedIg.length} đích):
         </div>
         {nothingPicked ? (
-          <p className="text-amber-600 font-medium">
-            ⚠️ Chưa có đích đăng nào được chọn. Hãy bấm &ldquo;Chọn đích đăng&rdquo; trên thẻ bài viết.
+          <p className="text-amber-700 dark:text-amber-400 font-medium">
+            Chưa có đích đăng nào được chọn. Hãy bấm &ldquo;Chọn đích đăng&rdquo; trên thẻ bài viết trước khi lên lịch.
           </p>
         ) : (
           <ul className="list-disc list-inside space-y-1 text-[var(--dim)]">
             {pickedPages.map((p) => (
               <li key={`p-${p.id}`}>
-                Fanpage Facebook: <strong>{p.name}</strong>
+                Fanpage Facebook: <strong className="text-[var(--text)]">{p.name}</strong>
               </li>
             ))}
             {pickedGroups.map((g) => (
               <li key={`g-${g.id}`}>
-                Hội nhóm Facebook: <strong>{g.name}</strong>
+                Hội nhóm Facebook: <strong className="text-[var(--text)]">{g.name}</strong>
               </li>
             ))}
             {pickedIg.map((a) => (
               <li key={`ig-${a.id}`}>
-                Instagram: <strong>{a.name}</strong>
+                Instagram: <strong className="text-[var(--text)]">{a.name}</strong>
               </li>
             ))}
           </ul>
@@ -265,14 +262,14 @@ export function SchedulePublishDialog({
       </div>
 
       {/* Lưu ý kỹ thuật */}
-      <div className="rounded-lg bg-blue-50/50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 p-2.5 text-[11px] text-blue-800 dark:text-blue-200 leading-relaxed">
-        💡 <strong>Cơ chế tự động:</strong> Khi đến giờ hẹn, máy chủ (<code>server.ts</code>) sẽ tự động kích hoạt tiến trình đăng. Đối với Hội nhóm, vui lòng giữ Chrome có Extension mở để hệ thống tự động đăng bài.
+      <div className="rounded-lg bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800/60 p-2.5 text-[11px] text-indigo-900 dark:text-indigo-200 leading-relaxed">
+        <strong>Lưu ý kỹ thuật:</strong> Khi đến giờ hẹn, máy chủ nội bộ sẽ tự động tiến hành đăng bài. Đối với các Hội nhóm Facebook, hãy đảm bảo trình duyệt mở tiện ích mở rộng (Extension) để hoàn tất đăng bài tự động.
       </div>
 
       {/* Thông báo lỗi nếu có */}
       {errorMsg && (
-        <div className="rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 p-2.5 text-xs text-rose-700 dark:text-rose-300 font-medium">
-          ⚠️ {errorMsg}
+        <div className="rounded-lg bg-rose-50 dark:bg-rose-950/50 border border-rose-300 dark:border-rose-800 p-2.5 text-xs text-rose-800 dark:text-rose-200 font-medium">
+          {errorMsg}
         </div>
       )}
 
@@ -282,15 +279,15 @@ export function SchedulePublishDialog({
           type="button"
           disabled={isSchedulePending || nothingPicked}
           onClick={handleSubmit}
-          className={`${btnPrimary} bg-indigo-600 hover:bg-indigo-700 text-white text-xs px-4 py-2 font-bold disabled:opacity-50`}
+          className={`${btnPrimary} bg-indigo-600 hover:bg-indigo-700 text-white text-xs px-4 py-2 font-bold disabled:opacity-50 cursor-pointer shadow-xs`}
         >
-          {isSchedulePending ? "Đang lên lịch…" : "⏰ Xác nhận lên lịch đăng"}
+          {isSchedulePending ? "Đang lên lịch…" : "Xác nhận lên lịch đăng"}
         </button>
         <button
           type="button"
           disabled={isSchedulePending}
           onClick={onCancel}
-          className={`${btnGhost} text-xs px-3 py-2`}
+          className={`${btnGhost} text-xs px-3 py-2 cursor-pointer`}
         >
           Đóng
         </button>

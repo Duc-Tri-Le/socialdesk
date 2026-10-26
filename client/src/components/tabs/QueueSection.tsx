@@ -119,7 +119,7 @@ export function QueueSection({
     },
     {
       id: "ready",
-      label: scheduledCount > 0 ? `Đã duyệt (⏰ ${scheduledCount})` : "Đã duyệt",
+      label: scheduledCount > 0 ? `Đã duyệt (${scheduledCount} hẹn giờ)` : "Đã duyệt",
       emptyText:
         scheduleFilter === "scheduled"
           ? "Chưa có bài nào được lên lịch hẹn giờ đăng."
@@ -236,13 +236,19 @@ export function QueueSection({
             }}
             className={`flex items-center gap-1.5 rounded-full px-3 py-1 font-semibold transition cursor-pointer ${
               scheduleFilter === "scheduled"
-                ? "bg-indigo-600 text-white"
-                : "border border-indigo-300 dark:border-indigo-800 bg-indigo-50/50 dark:bg-indigo-950/30 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100"
+                ? "bg-indigo-600 text-white shadow-xs"
+                : "border border-indigo-200 dark:border-indigo-800 bg-indigo-50/70 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/50"
             }`}
           >
-            <span>⏰ Đã lên lịch</span>
+            <span>Đã lên lịch</span>
             {scheduledCount > 0 && (
-              <span className="rounded-full bg-white/20 px-1.5 py-0.2 text-[10px] font-mono font-bold">
+              <span
+                className={`rounded-full px-1.5 py-0.2 text-[10px] font-mono font-bold ${
+                  scheduleFilter === "scheduled"
+                    ? "bg-white/20 text-white"
+                    : "bg-indigo-200/80 dark:bg-indigo-800 text-indigo-900 dark:text-indigo-100"
+                }`}
+              >
                 {scheduledCount}
               </span>
             )}

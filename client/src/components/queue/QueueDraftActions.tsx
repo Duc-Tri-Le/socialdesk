@@ -69,12 +69,12 @@ export function QueueDraftActions({
 
           <button
             type="button"
-            className={`${btnGhost} whitespace-nowrap font-medium text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/40`}
+            className={`${btnGhost} whitespace-nowrap font-medium text-indigo-700 dark:text-indigo-300 border border-indigo-300 dark:border-indigo-700 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 cursor-pointer`}
             aria-expanded={scheduleOpen}
             aria-label={`Lên lịch đăng bài ${d.product_name}`}
             onClick={onToggleSchedule}
           >
-            {d.scheduled_at ? "⏰ Đổi giờ hẹn" : "⏰ Lên lịch đăng"}
+            {d.scheduled_at ? "Đổi giờ hẹn" : "Lên lịch đăng"}
           </button>
         </>
       )}

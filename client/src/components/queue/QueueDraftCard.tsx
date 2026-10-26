@@ -262,17 +262,16 @@ export function QueueDraftCard({
 
       {/* Banner thông báo đã lên lịch đăng tự động */}
       {d.scheduled_at && (
-        <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2.5 rounded-xl border border-indigo-500/30 bg-indigo-500/10 px-3.5 py-2.5 text-xs text-indigo-950 dark:text-indigo-200">
+        <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2.5 rounded-xl border border-indigo-200 dark:border-indigo-800 bg-indigo-50/80 dark:bg-indigo-950/40 px-3.5 py-2.5 text-xs text-indigo-950 dark:text-indigo-100">
           <div className="flex items-center gap-2">
-            <span className="text-base">⏰</span>
             <div>
-              <span className="font-bold text-indigo-800 dark:text-indigo-300">
+              <span className="font-bold text-indigo-900 dark:text-indigo-200">
                 Đã hẹn giờ đăng tự động:
               </span>{" "}
-              <strong className="underline decoration-indigo-400">
+              <strong className="underline decoration-indigo-400 font-semibold">
                 {formatScheduledTime(d.scheduled_at)}
               </strong>{" "}
-              <span className="text-[11px] opacity-80 font-medium">
+              <span className="text-[11px] text-indigo-700 dark:text-indigo-300 font-medium">
                 ({getTimeUntil(d.scheduled_at)})
               </span>
             </div>
@@ -284,7 +283,7 @@ export function QueueDraftCard({
                 setPublishConfirm(false);
                 setScheduleOpen(true);
               }}
-              className="rounded-lg bg-indigo-500/20 hover:bg-indigo-500/30 px-2.5 py-1 font-semibold text-indigo-700 dark:text-indigo-200 transition cursor-pointer"
+              className="rounded-lg border border-indigo-300 dark:border-indigo-700 bg-white dark:bg-indigo-900/60 hover:bg-indigo-50 dark:hover:bg-indigo-900 px-2.5 py-1 text-xs font-semibold text-indigo-800 dark:text-indigo-100 transition cursor-pointer shadow-xs"
             >
               Đổi giờ
             </button>
@@ -293,7 +292,7 @@ export function QueueDraftCard({
                 type="button"
                 disabled={isCancelSchedulePending}
                 onClick={() => onCancelSchedule(d.id)}
-                className="rounded-lg bg-rose-500/15 hover:bg-rose-500/25 px-2.5 py-1 font-semibold text-rose-700 dark:text-rose-300 transition cursor-pointer disabled:opacity-50"
+                className="rounded-lg border border-rose-300 dark:border-rose-800 bg-white dark:bg-rose-950/50 hover:bg-rose-50 dark:hover:bg-rose-900/50 px-2.5 py-1 text-xs font-semibold text-rose-700 dark:text-rose-300 transition cursor-pointer disabled:opacity-50 shadow-xs"
               >
                 {isCancelSchedulePending ? "Đang hủy…" : "Hủy lịch"}
               </button>
