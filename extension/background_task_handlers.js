@@ -461,9 +461,9 @@ async function handleScanMetricsTask(task) {
     const tab = await chrome.tabs.create({ url: postUrl, active: false });
     createdTabId = tab.id;
 
-    await waitForTabComplete(createdTabId, 25000);
-    // Chờ 3 giây để giao diện tải đầy đủ các nút tương tác
-    await new Promise((r) => setTimeout(r, 3000));
+    await waitForTabComplete(createdTabId, 15000);
+    // Chờ 2 giây để giao diện tải đầy đủ các nút tương tác
+    await new Promise((r) => setTimeout(r, 2000));
 
     const ready = await ensureContentScriptReady(createdTabId, 4, isIg);
     if (!ready) {

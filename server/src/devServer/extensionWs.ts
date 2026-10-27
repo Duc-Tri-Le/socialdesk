@@ -13,10 +13,26 @@ export const pendingExtensionTasks = new Map<
 export const allSockets = new Set<any>();
 
 export function registerGlobalExtensionHelpers() {
-  (globalThis as any).__socialDeskGetOnlineExtensionCodes = () =>
-    Array.from(extensionSockets.keys());
-  (globalThis as any).__socialDeskIsExtensionOnline = (code: string) =>
-    !!code && extensionSockets.has(code.trim().toUpperCase());
+  (globalThis as any).__socialDeskGetOnlineExtensionCodes = () => {
+    const active: string[] = [];
+    for (const [code, ws] of extensionSockets.entries()) {
+      if (ws && (ws.readyState === 1 || ws.readyState === undefined)) {
+        active.push(code);
+      } else {
+        extensionSockets.delete(code);
+      }
+    }
+    return active;
+  };
+  (globalThis as any).__socialDeskIsExtensionOnline = (code: string) => {
+    if (!code) return false;
+    const norm = code.trim().toUpperCase();
+    const ws = extensionSockets.get(norm);
+    if (!ws) return false;
+    if (ws.readyState === 1 || ws.readyState === undefined) return true;
+    extensionSockets.delete(norm);
+    return false;
+  };
   (globalThis as any).__socialDeskPingExtensions = () => {
     for (const ws of allSockets) {
       try {
@@ -89,6 +105,12 @@ export function handleExtensionWsMessage(
     if (data.type === "REGISTER_EXTENSION") {
       const code = (data.code || "").trim().toUpperCase();
       if (code) {
+        if (ws.data?.code && ws.data.code !== code) {
+          console.log(
+            `[WebSocket] Trình duyệt đổi mã từ [${ws.data.code}] sang [${code}]. Đang gỡ mã cũ...`,
+          );
+          extensionSockets.delete(ws.data.code);
+        }
         ws.data = ws.data || {};
         ws.data.code = code;
         extensionSockets.set(code, ws);
@@ -199,5 +221,10 @@ export function handleExtensionWsClose(ws: any) {
     console.log(
       `[WebSocket] Chrome Extension mã [${ws.data.code}] đã ngắt kết nối.`,
     );
+  }
+  for (const [code, sock] of extensionSockets.entries()) {
+    if (sock === ws) {
+      extensionSockets.delete(code);
+    }
   }
 }

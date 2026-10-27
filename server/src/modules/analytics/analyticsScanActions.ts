@@ -10,6 +10,58 @@ import {
   type MetricRow,
 } from "../../services/analytics";
 
+function resolveTargetExtensionCode(
+  target: MetricRow,
+  postUrl: string,
+  allAccounts: (typeof schema.accounts.$inferSelect)[],
+  onlineCodes: string[],
+  isOnlineFn?: (code: string) => boolean,
+): string {
+  const isOnline = (c: string) => {
+    if (!c) return false;
+    const norm = c.trim().toUpperCase();
+    if (typeof isOnlineFn === "function") return isOnlineFn(norm);
+    return onlineCodes.includes(norm);
+  };
+
+  const isIg =
+    target.channelType === "instagram" ||
+    (postUrl || "").includes("instagram.com");
+
+  if (isIg) {
+    const igAcc =
+      allAccounts.find(
+        (a) =>
+          a.platform === "Instagram" &&
+          a.name.toLowerCase() === (target.channelName || "").toLowerCase(),
+      ) ||
+      allAccounts.find((a) => a.platform === "Instagram" && a.selected === 1) ||
+      allAccounts.find((a) => a.platform === "Instagram");
+    const code = (igAcc?.extensionCode || "").trim().toUpperCase();
+    if (code && isOnline(code)) return code;
+  } else {
+    const fbAcc =
+      allAccounts.find(
+        (a) =>
+          a.platform === "Facebook" &&
+          a.name.toLowerCase() === (target.channelName || "").toLowerCase(),
+      ) ||
+      allAccounts.find((a) => a.platform === "Facebook" && a.selected === 1) ||
+      allAccounts.find((a) => a.platform === "Facebook");
+    const code = (fbAcc?.extensionCode || "").trim().toUpperCase();
+    if (code && isOnline(code)) return code;
+  }
+
+  // Thử bất kỳ tài khoản nào có mã đang online
+  for (const a of allAccounts) {
+    const code = (a.extensionCode || "").trim().toUpperCase();
+    if (code && isOnline(code)) return code;
+  }
+
+  // Fallback về mã online gần nhất hoặc mã đầu tiên
+  return onlineCodes[onlineCodes.length - 1] || onlineCodes[0] || "";
+}
+
 export const analyticsScanActions = {
   /**
    * Đồng bộ tự động toàn bộ bài đã đăng thành công từ Hàng đợi (publish_records)
@@ -68,6 +120,7 @@ export const analyticsScanActions = {
       const globalAny = globalThis as any;
       const getCodes = globalAny.__socialDeskGetOnlineExtensionCodes;
       const sendTask = globalAny.__socialDeskSendExtensionTask;
+      const isOnlineFn = globalAny.__socialDeskIsExtensionOnline;
 
       const onlineCodes: string[] = typeof getCodes === "function" ? getCodes() : [];
       if (onlineCodes.length === 0) {
@@ -75,11 +128,13 @@ export const analyticsScanActions = {
           "Chrome Extension chưa kết nối. Vui lòng mở trình duyệt Chrome có cài Extension Social Desk để tự động quét tương tác bài viết.",
         );
       }
-      const extCode = onlineCodes[0];
 
       const db = ctx.db<typeof schema>();
       // Tự động đồng bộ các bài đã đăng từ hàng đợi vào bảng chỉ số
       await ensureMetricsSynced(db);
+
+      const allAccounts = await db.select().from(schema.accounts);
+      const usedCodes = new Set<string>();
 
       let targets: MetricRow[] = [];
 
@@ -116,15 +171,30 @@ export const analyticsScanActions = {
 
         if (!postUrl || (!postUrl.includes("facebook.com") && !postUrl.includes("instagram.com"))) continue;
 
+        const targetExtCode = resolveTargetExtensionCode(
+          m,
+          postUrl,
+          allAccounts,
+          onlineCodes,
+          isOnlineFn,
+        );
+
+        if (!targetExtCode) {
+          console.warn(`[Analytics] Bỏ qua bài #${m.id}: Không có Chrome Extension nào online phù hợp.`);
+          continue;
+        }
+
+        usedCodes.add(targetExtCode);
+
         try {
           const res = await sendTask(
-            extCode,
+            targetExtCode,
             {
               action: "SCAN_POST_METRICS",
               taskId: `scan_${Date.now()}_${m.id}`,
               postUrl,
             },
-            25000,
+            45000,
           );
 
           if (res && res.status === "success") {
@@ -177,18 +247,19 @@ export const analyticsScanActions = {
             updatedCount++;
           }
         } catch (e: any) {
-          console.warn(`[Analytics] Quét bài #${m.id} thất bại:`, e.message);
+          console.warn(`[Analytics] Quét bài #${m.id} qua [${targetExtCode}] thất bại:`, e.message);
         }
       }
 
       ctx.invalidateQueries();
 
+      const usedList = Array.from(usedCodes).join(", ") || onlineCodes[0];
       return {
         scanned_count: targets.length,
         updated_count: updatedCount,
         message:
           updatedCount > 0
-            ? `Đã cập nhật chỉ số công khai (Like, Comment, Share) và trạng thái hiển thị cho ${updatedCount} bài viết qua Extension [${extCode}]. (Reach chỉ hiển thị khi có quyền Admin; Inbox/Đơn hàng bảo toàn từ dữ liệu bán hàng).`
+            ? `Đã cập nhật chỉ số công khai (Like, Comment, Share) và trạng thái hiển thị cho ${updatedCount} bài viết qua Extension [${usedList}]. (Reach chỉ hiển thị khi có quyền Admin; Inbox/Đơn hàng bảo toàn từ dữ liệu bán hàng).`
             : "Chưa quét được tương tác nào. Vui lòng kiểm tra lại link bài viết hoặc quyền truy cập nhóm của tài khoản Facebook.",
       };
     },
@@ -214,6 +285,7 @@ export const analyticsScanActions = {
       const globalAny = globalThis as any;
       const getCodes = globalAny.__socialDeskGetOnlineExtensionCodes;
       const sendTask = globalAny.__socialDeskSendExtensionTask;
+      const isOnlineFn = globalAny.__socialDeskIsExtensionOnline;
 
       const onlineCodes: string[] = typeof getCodes === "function" ? getCodes() : [];
       if (onlineCodes.length === 0) {
@@ -221,10 +293,11 @@ export const analyticsScanActions = {
           "Chrome Extension chưa kết nối. Vui lòng mở trình duyệt Chrome có cài Extension Social Desk để quét hàng loạt.",
         );
       }
-      const extCode = onlineCodes[0];
 
       const db = ctx.db<typeof schema>();
       await ensureMetricsSynced(db);
+
+      const allAccounts = await db.select().from(schema.accounts);
 
       const targets = await db
         .select()
@@ -248,15 +321,28 @@ export const analyticsScanActions = {
 
         if (!postUrl || (!postUrl.includes("facebook.com") && !postUrl.includes("instagram.com"))) continue;
 
+        const targetExtCode = resolveTargetExtensionCode(
+          m,
+          postUrl,
+          allAccounts,
+          onlineCodes,
+          isOnlineFn,
+        );
+
+        if (!targetExtCode) {
+          console.warn(`[BatchScan] Bỏ qua bài #${m.id}: Không có Chrome Extension nào online phù hợp.`);
+          continue;
+        }
+
         try {
           const res = await sendTask(
-            extCode,
+            targetExtCode,
             {
               action: "SCAN_POST_METRICS",
               taskId: `batch_scan_${Date.now()}_${m.id}`,
               postUrl,
             },
-            25000,
+            45000,
           );
 
           if (res && res.status === "success") {
