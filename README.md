@@ -29,6 +29,7 @@ social-desk-database.db File database SQLite kèm dữ liệu hoạt động
 package.json            Khai báo dependency và các lệnh script chạy app
 vite.config.ts          Cấu hình Vite và proxy cho môi trường dev
 DATA-PLAN.md            Tài liệu thiết kế cấu trúc dữ liệu chi tiết
+PERMISSIONS_README.md   Hướng dẫn chi tiết toàn bộ quyền Meta API & xử lý hạn chế
 ```
 
 ---
@@ -151,6 +152,16 @@ Nếu bạn muốn chỉnh sửa code và xem thay đổi ngay lập tức:
 
 ---
 
-## 8. Bảo mật
+## 8. Quyền Meta API (Facebook & Instagram) & Xử lý hạn chế
+
+Hệ thống tích hợp Meta Graph API để đăng bài, đọc tương tác, quản lý bình luận và tin nhắn:
+- **Tài liệu quyền đầy đủ**: Xem chi tiết tại [PERMISSIONS_README.md](file:///c:/Users/Admin/Downloads/code/socialdesk/PERMISSIONS_README.md).
+- **Lưu ý quyền `pages_manage_engagement`**: Hiện bị Meta kiểm soát gắt gao (yêu cầu Xác minh Doanh nghiệp & App Review). 
+  - Đọc bình luận và tương tác chỉ cần **`pages_read_engagement`** (không bị hạn chế).
+  - Trả lời bình luận trên Fanpage khi chưa có quyền API có thể sử dụng trực tiếp qua **Chrome Extension Social Desk** (100% không bị chặn).
+
+---
+
+## 9. Bảo mật
 
 - File database đi kèm chứa dữ liệu sản phẩm, bài đăng và thông tin nội bộ của shop. Hãy bảo quản cẩn thận, không upload công khai lên repository công cộng.

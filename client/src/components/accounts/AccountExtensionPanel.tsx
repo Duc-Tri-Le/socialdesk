@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { Account } from "../../types";
 import { RefreshIcon } from "../ui";
+import { ApiTokenEditModal } from "./ApiTokenEditModal";
 
 export interface AccountExtensionPanelProps {
   account: Account;
@@ -25,6 +26,7 @@ export function AccountExtensionPanel({
   const [showExtConfig, setShowExtConfig] = useState(false);
   const [extInput, setExtInput] = useState(extCode);
   const [isRetrying, setIsRetrying] = useState(false);
+  const [showApiModal, setShowApiModal] = useState(false);
 
   const handleSaveExtCode = () => {
     onSaveExtensionCode({
@@ -44,6 +46,50 @@ export function AccountExtensionPanel({
       setIsRetrying(false);
     }, 1500);
   };
+
+  // Nếu là tài khoản Instagram: chuyển sang quản lý & đăng bài bằng Graph API
+  if (a.platform === "Instagram") {
+    const hasToken = (a as any).has_api_token;
+    const igId = (a as any).ig_business_account_id;
+    return (
+      <div className="mt-2.5 flex flex-wrap items-center justify-between gap-1.5 rounded-md border border-pink-500/20 bg-pink-500/5 px-2.5 py-1 text-xs">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="text-[11px] font-medium text-[var(--dim)]">
+            Instagram API:
+          </span>
+          {hasToken ? (
+            <span className="inline-flex items-center gap-1 font-semibold text-emerald-400 text-[11px]">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+              Graph API (ID: {igId || "Sẵn sàng"})
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 font-medium text-amber-400 text-[11px]">
+              <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+              Chưa có Token & ID
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            type="button"
+            onClick={() => setShowApiModal(true)}
+            className="inline-flex items-center gap-1 rounded bg-[var(--surface)] border border-pink-500/30 px-2 py-0.5 text-[11px] font-semibold text-pink-400 hover:border-pink-400 transition-colors"
+          >
+            <span>🔑 Cài đặt Token API</span>
+          </button>
+        </div>
+        {showApiModal && (
+          <ApiTokenEditModal
+            isOpen={showApiModal}
+            target={{ type: "instagram", account: a }}
+            onClose={() => setShowApiModal(false)}
+            onMsg={onMsg}
+            refresh={onRetryConnection || (() => {}) }
+          />
+        )}
+      </div>
+    );
+  }
 
   if (!showExtConfig) {
     return (

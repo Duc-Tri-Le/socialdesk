@@ -64,6 +64,8 @@ export const accounts = sqliteTable("accounts", {
   linked: integer("linked").notNull().default(1),
   selected: integer("selected").notNull().default(0),
   extensionCode: text("extension_code").notNull().default(""),
+  accessToken: text("access_token").notNull().default(""),
+  igBusinessAccountId: text("ig_business_account_id").notNull().default(""),
   createdAt: integer("created_at", { mode: "timestamp_ms" })
     .notNull()
     .$defaultFn(() => new Date()),
@@ -79,6 +81,8 @@ export const fbPages = sqliteTable("fb_pages", {
   url: text("url").notNull().default(""),
   role: text("role").notNull().default(""),
   selected: integer("selected").notNull().default(1),
+  accessToken: text("access_token").notNull().default(""),
+  fbPageId: text("fb_page_id").notNull().default(""),
   createdAt: integer("created_at", { mode: "timestamp_ms" })
     .notNull()
     .$defaultFn(() => new Date()),

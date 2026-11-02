@@ -29,6 +29,26 @@ try {
   // Cột extension_code đã tồn tại
 }
 try {
+  sqlite.run("ALTER TABLE accounts ADD COLUMN access_token TEXT NOT NULL DEFAULT '';");
+} catch {
+  // Cột access_token đã tồn tại
+}
+try {
+  sqlite.run("ALTER TABLE accounts ADD COLUMN ig_business_account_id TEXT NOT NULL DEFAULT '';");
+} catch {
+  // Cột ig_business_account_id đã tồn tại
+}
+try {
+  sqlite.run("ALTER TABLE fb_pages ADD COLUMN access_token TEXT NOT NULL DEFAULT '';");
+} catch {
+  // Cột access_token đã tồn tại
+}
+try {
+  sqlite.run("ALTER TABLE fb_pages ADD COLUMN fb_page_id TEXT NOT NULL DEFAULT '';");
+} catch {
+  // Cột fb_page_id đã tồn tại
+}
+try {
   sqlite.run("ALTER TABLE post_metrics ADD COLUMN post_status TEXT NOT NULL DEFAULT 'active';");
 } catch {
   // Cột post_status đã tồn tại

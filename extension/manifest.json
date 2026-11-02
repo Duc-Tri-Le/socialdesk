@@ -30,6 +30,8 @@
       ],
       "js": [
         "content_utils.js",
+        "content_profile.js",
+        "content_composer.js",
         "content.js"
       ],
       "run_at": "document_idle"
@@ -39,6 +41,7 @@
         "*://*.instagram.com/*"
       ],
       "js": [
+        "instagram_utils.js",
         "instagram_content.js"
       ],
       "run_at": "document_idle"

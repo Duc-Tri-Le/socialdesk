@@ -162,6 +162,48 @@
       "when": 1792658396215,
       "tag": "0023_add_draft_pack_targets",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "6",
+      "when": 1792659000000,
+      "tag": "0024_add_account_extension_code",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "6",
+      "when": 1792660000000,
+      "tag": "0025_add_post_metric_status",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "6",
+      "when": 1792661000000,
+      "tag": "0026_add_post_metric_scanned_at",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "6",
+      "when": 1792662000000,
+      "tag": "0027_add_post_metric_snapshots",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "6",
+      "when": 1792663000000,
+      "tag": "0028_add_draft_scheduled_at",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "6",
+      "when": 1792664000000,
+      "tag": "0029_add_api_tokens",
+      "breakpoints": true
     }
   ]
 }

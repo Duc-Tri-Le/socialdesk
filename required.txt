@@ -1,0 +1,28 @@
+# STRICT REFACTORING RULES
+
+Follow these rules throughout the entire refactoring process:
+
+1. Analyze before modifying.
+2. Understand existing dependencies before changing shared modules.
+3. Never modify code without understanding its purpose.
+4. Never delete functionality just because it appears unused without verifying its usage.
+5. Never duplicate existing utilities or business logic.
+6. Never introduce unnecessary packages or dependencies.
+7. Never use `any` as a shortcut.
+8. Never suppress errors to hide underlying problems.
+9. Never modify unrelated files.
+10. Never overwrite existing implementations without evaluating their impact.
+11. Never perform destructive database operations without approval.
+12. Never claim successful tests without executing them.
+13. Keep changes small, focused, and reversible.
+14. Verify affected modules after each refactoring stage.
+15. Update documentation when architecture or public interfaces change.
+
+IMPORTANT:
+If a change has a high risk of breaking existing functionality, stop and explain the risk before proceeding.
+
+The priority order is:
+
+Correctness > Stability > Security > Maintainability > Performance > Code brevity.
+
+Clean code does not mean fewer lines of code. It means clear responsibilities, predictable behavior, and maintainable implementation.

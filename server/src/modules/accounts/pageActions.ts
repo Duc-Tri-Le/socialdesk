@@ -26,6 +26,8 @@ export const pageActions = {
       url: z.string().default(""),
       name: z.string().default("").optional(),
       role: z.string().default("").optional(),
+      fb_page_id: z.string().default("").optional(),
+      access_token: z.string().default("").optional(),
     }),
     response: z.object({ ok: z.boolean(), message: z.string() }),
     async handler(ctx, args) {
@@ -70,6 +72,8 @@ export const pageActions = {
         url: cleanUrl,
         role: finalRole,
         selected: 1,
+        fbPageId: args.fb_page_id?.trim() || "",
+        accessToken: args.access_token?.trim() || "",
       });
       ctx.invalidateQueries();
       return {

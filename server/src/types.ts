@@ -42,6 +42,9 @@ export const accountOut = z.object({
   linked: z.boolean(),
   selected: z.boolean(),
   extension_code: z.string().default(""),
+  access_token: z.string().default(""),
+  ig_business_account_id: z.string().default(""),
+  has_api_token: z.boolean().default(false),
   session_status: z
     .enum(["logged_in", "expired", "checkpoint"])
     .default("logged_in"),
@@ -163,6 +166,9 @@ export function toAccountOut(
     linked: r.linked === 1,
     selected: r.selected === 1,
     extension_code: (r as any).extensionCode ?? "",
+    access_token: (r as any).accessToken ?? "",
+    ig_business_account_id: (r as any).igBusinessAccountId ?? "",
+    has_api_token: Boolean((r as any).accessToken),
     session_status: status,
   };
 }
@@ -175,6 +181,9 @@ export const pageOut = z.object({
   url: z.string(),
   role: z.string(),
   selected: z.boolean(),
+  fb_page_id: z.string().default(""),
+  access_token: z.string().default(""),
+  has_api_token: z.boolean().default(false),
 });
 
 export type PageRow = typeof schema.fbPages.$inferSelect;
@@ -192,6 +201,9 @@ export function toPageOut(
     url: r.url,
     role: r.role,
     selected: r.selected === 1,
+    fb_page_id: (r as any).fbPageId ?? "",
+    access_token: (r as any).accessToken ?? "",
+    has_api_token: Boolean((r as any).accessToken && (r as any).fbPageId),
   };
 }
 

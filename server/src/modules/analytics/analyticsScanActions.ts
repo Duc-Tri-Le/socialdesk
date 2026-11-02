@@ -9,58 +9,7 @@ import {
   ensureMetricsSynced,
   type MetricRow,
 } from "../../services/analytics";
-
-function resolveTargetExtensionCode(
-  target: MetricRow,
-  postUrl: string,
-  allAccounts: (typeof schema.accounts.$inferSelect)[],
-  onlineCodes: string[],
-  isOnlineFn?: (code: string) => boolean,
-): string {
-  const isOnline = (c: string) => {
-    if (!c) return false;
-    const norm = c.trim().toUpperCase();
-    if (typeof isOnlineFn === "function") return isOnlineFn(norm);
-    return onlineCodes.includes(norm);
-  };
-
-  const isIg =
-    target.channelType === "instagram" ||
-    (postUrl || "").includes("instagram.com");
-
-  if (isIg) {
-    const igAcc =
-      allAccounts.find(
-        (a) =>
-          a.platform === "Instagram" &&
-          a.name.toLowerCase() === (target.channelName || "").toLowerCase(),
-      ) ||
-      allAccounts.find((a) => a.platform === "Instagram" && a.selected === 1) ||
-      allAccounts.find((a) => a.platform === "Instagram");
-    const code = (igAcc?.extensionCode || "").trim().toUpperCase();
-    if (code && isOnline(code)) return code;
-  } else {
-    const fbAcc =
-      allAccounts.find(
-        (a) =>
-          a.platform === "Facebook" &&
-          a.name.toLowerCase() === (target.channelName || "").toLowerCase(),
-      ) ||
-      allAccounts.find((a) => a.platform === "Facebook" && a.selected === 1) ||
-      allAccounts.find((a) => a.platform === "Facebook");
-    const code = (fbAcc?.extensionCode || "").trim().toUpperCase();
-    if (code && isOnline(code)) return code;
-  }
-
-  // Thử bất kỳ tài khoản nào có mã đang online
-  for (const a of allAccounts) {
-    const code = (a.extensionCode || "").trim().toUpperCase();
-    if (code && isOnline(code)) return code;
-  }
-
-  // Fallback về mã online gần nhất hoặc mã đầu tiên
-  return onlineCodes[onlineCodes.length - 1] || onlineCodes[0] || "";
-}
+import { executeSingleMetricScan } from "./analyticsScanExecutor";
 
 export const analyticsScanActions = {
   /**
@@ -130,14 +79,12 @@ export const analyticsScanActions = {
       }
 
       const db = ctx.db<typeof schema>();
-      // Tự động đồng bộ các bài đã đăng từ hàng đợi vào bảng chỉ số
       await ensureMetricsSynced(db);
 
       const allAccounts = await db.select().from(schema.accounts);
       const usedCodes = new Set<string>();
 
       let targets: MetricRow[] = [];
-
       if (args.metric_id) {
         targets = await db
           .select()
@@ -161,7 +108,6 @@ export const analyticsScanActions = {
       const urlMap = buildPublishUrlMap(pubRecords);
 
       let updatedCount = 0;
-
       for (const m of targets) {
         let postUrl = extractValidUrl(m.notes);
         if (!postUrl && m.draftId) {
@@ -171,84 +117,18 @@ export const analyticsScanActions = {
 
         if (!postUrl || (!postUrl.includes("facebook.com") && !postUrl.includes("instagram.com"))) continue;
 
-        const targetExtCode = resolveTargetExtensionCode(
+        const res = await executeSingleMetricScan(
+          db,
           m,
           postUrl,
           allAccounts,
           onlineCodes,
+          sendTask,
           isOnlineFn,
+          "scan",
         );
-
-        if (!targetExtCode) {
-          console.warn(`[Analytics] Bỏ qua bài #${m.id}: Không có Chrome Extension nào online phù hợp.`);
-          continue;
-        }
-
-        usedCodes.add(targetExtCode);
-
-        try {
-          const res = await sendTask(
-            targetExtCode,
-            {
-              action: "SCAN_POST_METRICS",
-              taskId: `scan_${Date.now()}_${m.id}`,
-              postUrl,
-            },
-            45000,
-          );
-
-          if (res && res.status === "success") {
-            const newLikes = typeof res.likes === "number" ? res.likes : m.likes;
-            const newComments = typeof res.comments === "number" ? res.comments : m.comments;
-            const newShares = typeof res.shares === "number" ? res.shares : m.shares;
-            // Reach chỉ cập nhật khi kênh là Fanpage hoặc có dữ liệu Insights từ quyền Admin
-            const newReach = typeof res.reach === "number" && res.reach > 0 ? res.reach : m.reach;
-
-            const updateValues: Record<string, any> = {
-              likes: newLikes,
-              comments: newComments,
-              shares: newShares,
-              reach: newReach,
-              postStatus: "active",
-              scannedAt: new Date(),
-            };
-            if (res.postUrl && typeof res.postUrl === "string" && res.postUrl.length > 10 && res.postUrl !== m.notes) {
-              updateValues.notes = res.postUrl;
-            }
-
-            await db
-              .update(schema.postMetrics)
-              .set(updateValues)
-              .where(eq(schema.postMetrics.id, m.id));
-
-            await db.insert(schema.postMetricSnapshots).values({
-              postingId: m.id,
-              capturedAt: new Date(),
-              reactions: newLikes,
-              comments: newComments,
-              shares: newShares,
-              reach: typeof res.reach === "number" && res.reach > 0 ? res.reach : null,
-              source: "extension_dom",
-              dataQuality: "full",
-            });
-
-            updatedCount++;
-          } else if (res && res.status === "pending_approval") {
-            await db
-              .update(schema.postMetrics)
-              .set({ postStatus: "pending_approval", scannedAt: new Date() })
-              .where(eq(schema.postMetrics.id, m.id));
-            updatedCount++;
-          } else if (res && res.status === "removed") {
-            await db
-              .update(schema.postMetrics)
-              .set({ postStatus: "removed", scannedAt: new Date() })
-              .where(eq(schema.postMetrics.id, m.id));
-            updatedCount++;
-          }
-        } catch (e: any) {
-          console.warn(`[Analytics] Quét bài #${m.id} qua [${targetExtCode}] thất bại:`, e.message);
-        }
+        if (res.targetExtCode) usedCodes.add(res.targetExtCode);
+        if (res.updated) updatedCount++;
       }
 
       ctx.invalidateQueries();
@@ -298,7 +178,6 @@ export const analyticsScanActions = {
       await ensureMetricsSynced(db);
 
       const allAccounts = await db.select().from(schema.accounts);
-
       const targets = await db
         .select()
         .from(schema.postMetrics)
@@ -311,7 +190,6 @@ export const analyticsScanActions = {
       const urlMap = buildPublishUrlMap(pubRecords);
 
       let updatedCount = 0;
-
       for (const m of targets) {
         let postUrl = extractValidUrl(m.notes);
         if (!postUrl && m.draftId) {
@@ -321,82 +199,17 @@ export const analyticsScanActions = {
 
         if (!postUrl || (!postUrl.includes("facebook.com") && !postUrl.includes("instagram.com"))) continue;
 
-        const targetExtCode = resolveTargetExtensionCode(
+        const res = await executeSingleMetricScan(
+          db,
           m,
           postUrl,
           allAccounts,
           onlineCodes,
+          sendTask,
           isOnlineFn,
+          "batch_scan",
         );
-
-        if (!targetExtCode) {
-          console.warn(`[BatchScan] Bỏ qua bài #${m.id}: Không có Chrome Extension nào online phù hợp.`);
-          continue;
-        }
-
-        try {
-          const res = await sendTask(
-            targetExtCode,
-            {
-              action: "SCAN_POST_METRICS",
-              taskId: `batch_scan_${Date.now()}_${m.id}`,
-              postUrl,
-            },
-            45000,
-          );
-
-          if (res && res.status === "success") {
-            const newLikes = typeof res.likes === "number" ? res.likes : m.likes;
-            const newComments = typeof res.comments === "number" ? res.comments : m.comments;
-            const newShares = typeof res.shares === "number" ? res.shares : m.shares;
-            // Reach chỉ cập nhật khi kênh là Fanpage hoặc có dữ liệu Insights từ quyền Admin
-            const newReach = typeof res.reach === "number" && res.reach > 0 ? res.reach : m.reach;
-
-            const updateValues: Record<string, any> = {
-              likes: newLikes,
-              comments: newComments,
-              shares: newShares,
-              reach: newReach,
-              postStatus: "active",
-              scannedAt: new Date(),
-            };
-            if (res.postUrl && typeof res.postUrl === "string" && res.postUrl.length > 10 && res.postUrl !== m.notes) {
-              updateValues.notes = res.postUrl;
-            }
-
-            await db
-              .update(schema.postMetrics)
-              .set(updateValues)
-              .where(eq(schema.postMetrics.id, m.id));
-
-            await db.insert(schema.postMetricSnapshots).values({
-              postingId: m.id,
-              capturedAt: new Date(),
-              reactions: newLikes,
-              comments: newComments,
-              shares: newShares,
-              reach: typeof res.reach === "number" && res.reach > 0 ? res.reach : null,
-              source: "extension_dom",
-              dataQuality: "full",
-            });
-
-            updatedCount++;
-          } else if (res && res.status === "pending_approval") {
-            await db
-              .update(schema.postMetrics)
-              .set({ postStatus: "pending_approval", scannedAt: new Date() })
-              .where(eq(schema.postMetrics.id, m.id));
-            updatedCount++;
-          } else if (res && res.status === "removed") {
-            await db
-              .update(schema.postMetrics)
-              .set({ postStatus: "removed", scannedAt: new Date() })
-              .where(eq(schema.postMetrics.id, m.id));
-            updatedCount++;
-          }
-        } catch (e: any) {
-          console.warn(`[BatchScan] Lỗi quét bài #${m.id}:`, e.message);
-        }
+        if (res.updated) updatedCount++;
 
         // Giãn cách an toàn 2.5 giây giữa các lượt quét theo chính sách Facebook, phòng ngừa checkpoint
         if (targets.indexOf(m) < targets.length - 1) {

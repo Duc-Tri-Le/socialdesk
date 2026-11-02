@@ -10,6 +10,7 @@ import { groupActions } from "./modules/groups";
 import { draftActions } from "./modules/drafts";
 import { analyticsActions } from "./modules/analytics";
 import { mediaActions } from "./modules/media";
+import { interactionActions } from "./modules/interactions";
 
 export const Actions = {
   ...systemActions,
@@ -20,6 +21,7 @@ export const Actions = {
   ...draftActions,
   ...analyticsActions,
   ...mediaActions,
+  ...interactionActions,
 } satisfies ActionsModule;
 
 export type Actions = typeof Actions;

@@ -3,17 +3,13 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api";
 import { useAccountMutations } from "../accounts/useAccountMutations";
 import type { Account, Page } from "../../types";
+import { SearchInput } from "../ui";
 import {
-  FeedbackBanner,
-  GridIcon,
-  SearchInput,
-  TableIcon,
-} from "../ui";
-import {
-  AccountAddForm,
+  AccountsHeader,
   AccountPlatformColumn,
   AccountTableView,
-  ExtensionStatusCard,
+  FacebookApiConfigModal,
+  ApiTokenEditModal,
   filterAndSortAccounts,
   getSessionStatus,
   isAccountOnline,
@@ -29,16 +25,35 @@ export function AccountsSection({
   const queryClient = useQueryClient();
   const [msg, setMsg] = useState("");
 
-  // Chế độ xem: Dạng thẻ 2 cột (cards) hoặc Dạng bảng desktop (table)
   const [viewMode, setViewMode] = useState<"cards" | "table">("cards");
-
-  // Kiểu hiển thị trong dạng thẻ: Phân trang (paged) hoặc Danh sách cuộn (scroll)
   const [scrollLayout, setScrollLayout] = useState<"paged" | "scroll">("paged");
-
-  // Trạng thái mở/đóng form thêm tài khoản
   const [isAddFormOpen, setIsAddFormOpen] = useState(false);
+  const [isFbApiModalOpen, setIsFbApiModalOpen] = useState(false);
+  const [tokenModalTarget, setTokenModalTarget] = useState<
+    { type: "page"; page: Page } | { type: "instagram"; account: Account } | null
+  >(null);
 
-  // Bộ lọc cho chế độ bảng desktop
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const code = urlParams.get("code");
+    if (code) {
+      setMsg("Đang hoàn tất đồng bộ tài khoản Facebook OAuth...");
+      const redirectUri = window.location.origin + window.location.pathname;
+      api.handleFacebookOAuthCallback({ code, redirect_uri: redirectUri })
+        .then((res) => {
+          setMsg(res.message);
+          refresh();
+        })
+        .catch((err) => {
+          setMsg("Lỗi xác thực OAuth: " + (err?.message || "Thất bại"));
+        })
+        .finally(() => {
+          const newUrl = window.location.origin + window.location.pathname;
+          window.history.replaceState({}, document.title, newUrl);
+        });
+    }
+  }, []);
+
   const [tablePlatformFilter, setTablePlatformFilter] = useState<
     "all" | "Facebook" | "Instagram"
   >("all");
@@ -50,7 +65,6 @@ export function AccountsSection({
     queryClient.invalidateQueries({ queryKey: ["pages"] });
   };
 
-  // Polling danh sách mã Chrome Extension đang online qua WebSocket
   const connectedExtQ = useQuery({
     queryKey: ["connectedExtensions"],
     queryFn: () => api.getConnectedExtensions({}),
@@ -73,16 +87,15 @@ export function AccountsSection({
     prevCodesRef.current = serialized;
   }, [onlineCodes, queryClient]);
 
-  // Mutations
   const {
     addAccount,
     select,
-    saveExtensionCode,
     setSessionStatus,
     link,
-    del,
-    saveUrl,
+    saveExtensionCode,
     saveName,
+    saveUrl,
+    del,
     switchProfile,
   } = useAccountMutations({
     setMsg,
@@ -101,17 +114,15 @@ export function AccountsSection({
     queryClient.invalidateQueries({ queryKey: ["overview"] });
   };
 
-  // Phân tách tài khoản theo nền tảng
   const fbAccounts = useMemo(
-    () => accounts.filter((a) => a.platform.toLowerCase() === "facebook"),
+    () => accounts.filter((a) => a.platform === "Facebook"),
     [accounts],
   );
   const instaAccounts = useMemo(
-    () => accounts.filter((a) => a.platform.toLowerCase() === "instagram"),
+    () => accounts.filter((a) => a.platform === "Instagram"),
     [accounts],
   );
 
-  // Thống kê tổng hợp (chỉ tính lại khi danh sách accounts hoặc onlineCodes đổi)
   const summaryStats = useMemo(() => {
     let totalLoggedIn = 0;
     let totalExpired = 0;
@@ -137,7 +148,6 @@ export function AccountsSection({
     };
   }, [accounts, onlineCodes]);
 
-  // Lọc tài khoản cho chế độ Bảng Desktop
   const tableAccounts = useMemo(() => {
     return filterAndSortAccounts(accounts, {
       search: tableSearch,
@@ -154,122 +164,39 @@ export function AccountsSection({
 
   return (
     <div className="space-y-6">
-      {/* ================= HEADER TỔNG THỂ (GỌN 2 HÀNG RÕ RÀNG) ================= */}
-      <section aria-label="Danh sách tài khoản">
-        <header className="flex flex-col gap-2">
-          {/* Hàng 1: Tiêu đề + Tổng số tài khoản (trái) và Chuyển chế độ xem + Nút thêm mới (phải) */}
-          <div className="flex flex-wrap items-center justify-between gap-2.5">
-            <div className="flex items-center gap-2">
-              <h2 className="text-base sm:text-lg font-bold text-[var(--text)]">
-                Quản lý tài khoản mạng xã hội
-              </h2>
-              <span className="inline-flex items-center rounded-md bg-[var(--surface-alt)] px-2 py-0.5 text-xs font-semibold text-[var(--dim)] border border-[var(--border)]">
-                {accounts.length} nick ({fbAccounts.length} FB · {instaAccounts.length} IG)
-              </span>
-            </div>
+      <AccountsHeader
+        accounts={accounts}
+        fbAccountsCount={fbAccounts.length}
+        instaAccountsCount={instaAccounts.length}
+        pages={pages}
+        onlineCodes={onlineCodes}
+        viewMode={viewMode}
+        setViewMode={setViewMode}
+        onOpenFbApiModal={() => setIsFbApiModalOpen(true)}
+        isAddFormOpen={isAddFormOpen}
+        setIsAddFormOpen={setIsAddFormOpen}
+        onAddAccount={(args) => addAccount.mutate(args)}
+        isAddAccountPending={addAccount.isPending}
+        summaryStats={summaryStats}
+        msg={msg}
+        setMsg={setMsg}
+        isExtensionFetching={connectedExtQ.isFetching}
+        onGlobalRetry={handleGlobalRetry}
+      />
 
-            <div className="flex items-center gap-2">
-              {/* Bộ chuyển đổi chế độ xem: Dạng Thẻ vs Dạng Bảng */}
-              <div className="inline-flex items-center rounded-lg border border-[var(--border)] bg-[var(--surface)] p-0.5 text-xs">
-                <button
-                  type="button"
-                  onClick={() => setViewMode("cards")}
-                  className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 font-semibold transition-colors ${
-                    viewMode === "cards"
-                      ? "bg-[var(--accent)] text-white shadow-sm"
-                      : "text-[var(--dim)] hover:text-[var(--text)]"
-                  }`}
-                  title="Xem dạng thẻ 2 cột"
-                >
-                  <GridIcon className="h-3.5 w-3.5" />
-                  <span>Dạng thẻ</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setViewMode("table")}
-                  className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 font-semibold transition-colors ${
-                    viewMode === "table"
-                      ? "bg-[var(--accent)] text-white shadow-sm"
-                      : "text-[var(--dim)] hover:text-[var(--text)]"
-                  }`}
-                  title="Xem dạng bảng dữ liệu desktop"
-                >
-                  <TableIcon className="h-3.5 w-3.5" />
-                  <span>Bảng desktop</span>
-                </button>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setIsAddFormOpen(!isAddFormOpen)}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--accent)] px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:opacity-90 transition-opacity"
-              >
-                {isAddFormOpen ? "✕ Đóng form" : "+ Thêm tài khoản mới"}
-              </button>
-            </div>
-          </div>
-
-          {/* Hàng 2: Thống kê trạng thái gom gọn trên 1 hàng */}
-          <div className="flex flex-wrap items-center gap-1.5 text-xs">
-            <span className="inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--surface-alt)]/60 px-2.5 py-1 text-[var(--dim)]">
-              <span className="h-1.5 w-1.5 rounded-full bg-[var(--ok)]" />
-              Phiên: <strong className="text-[var(--ok)] font-semibold">{summaryStats.totalLoggedIn}</strong> Đã đăng nhập
-              {summaryStats.totalExpired > 0 && <span className="text-[var(--dim)]">· {summaryStats.totalExpired} Hết phiên</span>}
-              {summaryStats.totalCheckpoint > 0 && <span className="text-[var(--warn)] font-semibold">· {summaryStats.totalCheckpoint} Cần xác minh</span>}
-            </span>
-            <span className="inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--surface-alt)]/60 px-2.5 py-1 text-[var(--dim)]">
-              <span className="h-1.5 w-1.5 rounded-full bg-[var(--info)]" />
-              Extension: <strong className="text-[var(--info)] font-semibold">{summaryStats.totalOnline}</strong> Online
-              {accounts.length - summaryStats.totalOnline > 0 && <span className="text-[var(--dim)]">· {accounts.length - summaryStats.totalOnline} Offline</span>}
-            </span>
-            <span className="inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--surface-alt)]/60 px-2.5 py-1 text-[var(--dim)]">
-              <span className="h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
-              Đang dùng: <strong className="text-[var(--accent)] font-semibold">{summaryStats.totalSelected}</strong> nick
-            </span>
-            <span className="inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] bg-[var(--surface-alt)]/60 px-2.5 py-1 text-[var(--dim)]">
-              <span className="h-1.5 w-1.5 rounded-full bg-[var(--info)]" />
-              <strong className="text-[var(--info)] font-semibold">{pages.length}</strong> Fanpage
-            </span>
-          </div>
-        </header>
-
-        {/* Thông báo phản hồi */}
-        <FeedbackBanner
-          message={msg}
-          onDismiss={() => setMsg("")}
-          className="mt-3"
-        />
-
-        {/* Form thêm tài khoản mới */}
-        <AccountAddForm
-          isOpen={isAddFormOpen}
-          onToggle={setIsAddFormOpen}
-          onSubmit={(args) => addAccount.mutate(args)}
-          isPending={addAccount.isPending}
-        />
-
-        {/* Trạng thái kết nối Chrome Extension + nút Thử kết nối lại toàn bộ */}
-        <ExtensionStatusCard
-          onlineCodes={onlineCodes}
-          isFetching={connectedExtQ.isFetching}
-          onRetryAll={handleGlobalRetry}
-        />
-      </section>
-
-      {/* ================= CHẾ ĐỘ 1: BẢNG DESKTOP KHI SỐ LƯỢNG TÀI KHOẢN LỚN ================= */}
+      {/* CHẾ ĐỘ 1: BẢNG DESKTOP */}
       {viewMode === "table" ? (
         <section
           aria-label="Bảng quản lý tài khoản"
           className="space-y-3 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm"
         >
-          {/* Toolbar lọc và tìm kiếm cho bảng */}
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] pb-3">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs font-bold text-[var(--text)]">Lọc bảng:</span>
               <button
                 type="button"
                 onClick={() => setTablePlatformFilter("all")}
-                className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
+                className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors cursor-pointer ${
                   tablePlatformFilter === "all"
                     ? "bg-[var(--accent)] text-white"
                     : "bg-[var(--surface-alt)] text-[var(--dim)] hover:text-[var(--text)]"
@@ -280,9 +207,9 @@ export function AccountsSection({
               <button
                 type="button"
                 onClick={() => setTablePlatformFilter("Facebook")}
-                className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
+                className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors cursor-pointer ${
                   tablePlatformFilter === "Facebook"
-                    ? "bg-blue-600 text-white"
+                    ? "bg-[#1877F2] text-white"
                     : "bg-[var(--surface-alt)] text-[var(--dim)] hover:text-[var(--text)]"
                 }`}
               >
@@ -291,9 +218,9 @@ export function AccountsSection({
               <button
                 type="button"
                 onClick={() => setTablePlatformFilter("Instagram")}
-                className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
+                className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors cursor-pointer ${
                   tablePlatformFilter === "Instagram"
-                    ? "bg-pink-600 text-white"
+                    ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white"
                     : "bg-[var(--surface-alt)] text-[var(--dim)] hover:text-[var(--text)]"
                 }`}
               >
@@ -301,9 +228,8 @@ export function AccountsSection({
               </button>
             </div>
 
-            <div className="w-full sm:w-72">
+            <div className="w-full sm:w-64">
               <SearchInput
-                id="search-table-accounts"
                 value={tableSearch}
                 onChange={setTableSearch}
                 placeholder="Tìm nick, nền tảng, mã Chrome, Page..."
@@ -334,9 +260,8 @@ export function AccountsSection({
           />
         </section>
       ) : (
-        /* ================= CHẾ ĐỘ 2: BỐ CỤC 2 CỘT DẠNG THẺ (FACEBOOK & INSTAGRAM) ================= */
+        /* CHẾ ĐỘ 2: BỐ CỤC 2 CỘT DẠNG THẺ (FACEBOOK & INSTAGRAM) */
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-          {/* CỘT 1: TÀI KHOẢN FACEBOOK */}
           <AccountPlatformColumn
             platform="Facebook"
             accounts={fbAccounts}
@@ -362,7 +287,6 @@ export function AccountsSection({
             onOpenAddForm={() => setIsAddFormOpen(true)}
           />
 
-          {/* CỘT 2: TÀI KHOẢN INSTAGRAM */}
           <AccountPlatformColumn
             platform="Instagram"
             accounts={instaAccounts}
@@ -388,6 +312,23 @@ export function AccountsSection({
           />
         </div>
       )}
+
+      {/* Modal cấu hình Facebook App & OAuth flow */}
+      <FacebookApiConfigModal
+        isOpen={isFbApiModalOpen}
+        onClose={() => setIsFbApiModalOpen(false)}
+        onMsg={setMsg}
+        refresh={refresh}
+      />
+
+      {/* Modal chỉnh sửa Page/IG API Access Token */}
+      <ApiTokenEditModal
+        isOpen={Boolean(tokenModalTarget)}
+        target={tokenModalTarget}
+        onClose={() => setTokenModalTarget(null)}
+        onMsg={setMsg}
+        refresh={refresh}
+      />
     </div>
   );
 }

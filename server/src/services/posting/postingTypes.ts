@@ -2,7 +2,7 @@ import { z } from "@hatch/space-sdk";
 import * as schema from "../../schema";
 import { driveImageSchema } from "../drive";
 
-export const FB_PAGE_CAPTION_LIMIT = 1024;
+export const FB_PAGE_CAPTION_LIMIT = 60000;
 export const IG_CAPTION_LIMIT = 2200;
 
 export const SUPERSEDABLE_PUBLISH_STATUSES = new Set([

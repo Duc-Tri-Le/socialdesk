@@ -12,6 +12,8 @@ import { ComposeSection } from "./components/tabs/ComposeSection";
 import { QueueSection } from "./components/tabs/QueueSection";
 import { AnalyticsSection } from "./components/tabs/AnalyticsSection";
 import { MediaSection } from "./components/tabs/MediaSection";
+import { MessagesSection } from "./components/tabs/MessagesSection";
+import { CommentsSection } from "./components/tabs/CommentsSection";
 
 function getInitialTab(): Tab {
   try {
@@ -200,7 +202,7 @@ export function App() {
 
         <main
           className={`mx-auto w-full px-4 pb-16 pt-4 ${
-            tab === "compose" || tab === "products" || tab === "analytics"
+            tab === "compose" || tab === "products" || tab === "analytics" || tab === "messages" || tab === "comments"
               ? "max-w-6xl"
               : "max-w-3xl"
           }`}
@@ -226,6 +228,20 @@ export function App() {
                 pages={overview.data.pages}
               />
             ))}
+          
+          {tab === "messages" && (
+            <MessagesSection
+              accounts={overview.data?.accounts ?? []}
+              pages={overview.data?.pages ?? []}
+            />
+          )}
+          {tab === "comments" && (
+            <CommentsSection
+              accounts={overview.data?.accounts ?? []}
+              pages={overview.data?.pages ?? []}
+              drafts={drafts.data?.drafts ?? []}
+            />
+          )}
           {tab === "products" && <ProductsSection />}
           {tab === "research" && <ResearchSection />}
           {tab === "groups" && <GroupsSection />}

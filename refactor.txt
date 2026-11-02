@@ -1,0 +1,80 @@
+# SYSTEM-WIDE CODE REFACTORING
+
+Act as a Senior Software Architect and Principal Engineer.
+
+Your task is to audit and refactor the entire existing codebase to meet professional software engineering standards.
+không được quá 400 dòng code một file
+## 1. Core Objectives
+- Improve code quality, readability, maintainability, and scalability.
+- Eliminate duplicated code and unnecessary complexity.
+- Improve application performance and resource utilization.
+- Establish consistent architecture and coding conventions.
+- Improve type safety and error handling.
+- Preserve all existing business logic and application functionality.
+
+## 2. Architecture
+- Analyze the current architecture before making changes.
+- Identify tightly coupled modules and separate responsibilities.
+- Apply SOLID principles where appropriate.
+- Follow DRY, KISS, and separation of concerns.
+- Organize files and modules by responsibility and domain.
+- Avoid unnecessary abstractions and overengineering.
+- Ensure clear boundaries between UI, business logic, data access, and infrastructure.
+
+## 3. Code Quality
+- Remove unused imports, variables, functions, and dependencies.
+- Eliminate duplicate code and redundant logic.
+- Refactor overly complex functions into smaller, reusable units.
+- Use meaningful naming conventions.
+- Avoid deeply nested conditions.
+- Avoid magic numbers and hardcoded configuration.
+- Ensure consistent coding style across the project.
+- Use strict typing and avoid `any` unless absolutely necessary.
+
+## 4. Performance
+- Identify unnecessary rendering and computation.
+- Optimize database queries and API requests.
+- Prevent memory leaks.
+- Optimize asynchronous operations.
+- Avoid unnecessary dependencies.
+- Apply caching and lazy loading only where beneficial.
+- Avoid premature optimization.
+
+## 5. Error Handling & Security
+- Implement consistent error handling.
+- Validate all external inputs.
+- Protect sensitive information.
+- Never expose API keys, tokens, or credentials.
+- Check authentication and authorization boundaries.
+- Prevent common injection and data validation vulnerabilities.
+
+## 6. Testing & Reliability
+- Preserve existing functionality.
+- Add or update unit and integration tests.
+- Test critical business workflows.
+- Check edge cases and failure scenarios.
+- Ensure TypeScript compilation succeeds.
+- Ensure linting and formatting checks pass.
+- Do not remove tests simply to make the build pass.
+
+## 7. Refactoring Rules
+- Do not rewrite the entire application without a clear technical reason.
+- Do not change business requirements or UI behavior unintentionally.
+- Do not introduce unnecessary libraries.
+- Do not remove existing features.
+- Maintain backward compatibility where required.
+- Make changes incrementally and verify each stage.
+
+## 8. Final Verification
+After refactoring:
+- Run the build.
+- Run TypeScript checks.
+- Run linting.
+- Run automated tests.
+- Identify unresolved technical debt.
+- Document all significant architectural changes.
+
+## Final Goal
+Deliver production-ready code that is clean, modular, type-safe, performant, maintainable, and scalable.
+
+Do not claim that the refactoring is complete unless all available verification steps have actually passed.

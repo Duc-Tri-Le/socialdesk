@@ -40,12 +40,16 @@ export type Tab =
   | "groups"
   | "compose"
   | "queue"
+  | "messages"
+  | "comments"
   | "analytics"
   | "media";
 
 export const TABS: { id: Tab; label: string }[] = [
   { id: "overview", label: "Tổng quan" },
   { id: "accounts", label: "Tài khoản" },
+  { id: "messages", label: "Tin nhắn" },
+  { id: "comments", label: "Bình luận" },
   { id: "products", label: "Sản phẩm" },
   { id: "research", label: "Nghiên cứu" },
   { id: "groups", label: "Hội nhóm" },

@@ -191,8 +191,11 @@ export async function executePublishDraft(
   const helpers = { alreadyPublished, alreadyQueued, alreadyUncertain, record };
 
   const browserQueue: BrowserQueueItem[] = [];
+  const publicImageUrls = driveImages
+    .map((im) => im.jpeg_url || im.view_url)
+    .filter((u): u is string => typeof u === "string" && Boolean(u));
 
-  // 1. Fanpages
+  // 1. Fanpages (đăng trực tiếp qua Facebook Graph API)
   const pageBrowserQueue = await publishToPages(
     ctx,
     db,
@@ -201,10 +204,11 @@ export async function executePublishDraft(
     localFiles,
     mediaNote,
     helpers,
+    publicImageUrls,
   );
   browserQueue.push(...pageBrowserQueue);
 
-  // 2. Instagram Queue (hỗ trợ đẩy vào browserQueue nếu không có Hatch CLI / localFiles)
+  // 2. Instagram (đăng trực tiếp qua Instagram Graph API)
   const igQueue = await prepareInstagramQueue(
     ctx,
     db,
@@ -215,6 +219,7 @@ export async function executePublishDraft(
     mediaNote,
     helpers,
     browserQueue,
+    publicImageUrls,
   );
 
   // 3. Groups Queue
